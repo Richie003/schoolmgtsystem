@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  /*
+   * Modules from the pre-MVP scaffold that fall outside the four in-scope areas
+   * (Students, Staff, CBT, Import/Export). The files are kept on disk for
+   * reference but are not routed from the UI and are excluded from the build,
+   * since they reference APIs and types that no longer exist.
+   */
+  "exclude": [
+    "src/components/Timetable",
+    "src/components/Results",
+    "src/components/Memos",
+    "src/components/Notifications",
+    "src/components/Auth/Register.tsx",
+    "src/context/AppContext.tsx"
+  ]
+}
