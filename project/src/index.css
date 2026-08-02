@@ -24,3 +24,42 @@
   --brand-950: 23 37 84;
   --brand-contrast: 255 255 255;
 }
+
+@layer utilities {
+  /*
+   * Scroll-reveal: elements start hidden and slid down, then transition into
+   * place when <Reveal> adds `is-visible` (once they enter the viewport). The
+   * transition-delay is set inline for stagger. Reduced motion shows content
+   * immediately with no movement.
+   */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Animated gradient text needs an oversized background to pan across. */
+  .animate-gradient-x {
+    background-size: 200% 200%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .animate-float,
+  .animate-blob,
+  .animate-gradient-x,
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}

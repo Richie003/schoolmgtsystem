@@ -1,45 +1,46 @@
-import { BookOpen, Loader2 } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
+/*
+ * Full-screen boot loader: a single "beeping" logo. The brand mark holds still
+ * while pulse rings radiate out from it like a radar ping — one calm focal
+ * point instead of the five simultaneous animations this screen used to run
+ * (a spinning badge, a second spinner by the text, a pulsing bar and bouncing
+ * dots all at once). The school's own logo is used once branding has loaded;
+ * during the very first boot (no user yet) it falls back to the brand mark.
+ */
 export default function LoadingSpinner() {
+  const { logo, schoolName } = useTheme();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-indigo-50 flex items-center justify-center">
-      <div className="text-center">
-        {/* Logo with animation */}
-        <div className="flex justify-center items-center mb-8">
-          <div className="relative">
-            <div className="bg-brand-600 p-4 rounded-full animate-pulse">
-              <BookOpen className="h-12 w-12 text-white" />
-            </div>
-            <div className="absolute -top-1 -right-1">
-              <Loader2 className="h-6 w-6 text-brand-600 animate-spin" />
-            </div>
+      <div
+        role="status"
+        aria-label="Loading"
+        className="flex flex-col items-center gap-6 text-center"
+      >
+        <div className="relative h-20 w-20">
+          {/* The beep: expanding, fading rings. Two, staggered, so a pulse is
+              always mid-flight. Hidden for users who prefer reduced motion —
+              the mark itself gently pulses for them instead. */}
+          <span className="absolute inset-0 rounded-full bg-brand-400/40 animate-ping motion-reduce:hidden" />
+          <span
+            className="absolute inset-0 rounded-full bg-brand-400/30 animate-ping motion-reduce:hidden"
+            style={{ animationDelay: '0.6s' }}
+          />
+          {/* The steady mark. */}
+          <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-brand-600 shadow-lg motion-reduce:animate-pulse">
+            {logo ? (
+              <img src={logo} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <BookOpen className="h-10 w-10 text-white" />
+            )}
           </div>
         </div>
 
-        {/* Loading text */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-gray-900">
-            School Management System
-          </h2>
-          <div className="flex items-center justify-center space-x-2">
-            <Loader2 className="h-5 w-5 text-brand-600 animate-spin" />
-            <p className="text-gray-600 font-medium">Loading your dashboard...</p>
-          </div>
-        </div>
-
-        {/* Loading progress bar */}
-        <div className="mt-8 w-64 mx-auto">
-          <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div className="bg-gradient-to-r from-brand-500 to-brand-600 h-full rounded-full animate-pulse"></div>
-          </div>
-        </div>
-
-        {/* Subtle loading dots */}
-        <div className="flex justify-center space-x-1 mt-6">
-          <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-        </div>
+        <p className="text-lg font-semibold text-gray-900">
+          {schoolName || 'NlightR School Management System'}
+        </p>
       </div>
     </div>
   );

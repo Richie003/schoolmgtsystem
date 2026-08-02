@@ -362,3 +362,48 @@ export interface ExportPreview {
   total_rows: number;
   preview: Record<string, unknown>[];
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding (school signup)
+// ---------------------------------------------------------------------------
+export type SignupRequestStatus = 'pending' | 'approved' | 'rejected';
+export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
+
+export interface SchoolSignupRequest {
+  id: number;
+  school_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  message: string;
+  status: SignupRequestStatus;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_note: string;
+  invitation_status: InvitationStatus | null;
+  created_at: string;
+}
+
+export interface SchoolInvitation {
+  id: number;
+  email: string;
+  school_name: string;
+  status: InvitationStatus;
+  request: number | null;
+  created_by: number | null;
+  created_by_name: string | null;
+  expires_at: string;
+  consumed_at: string | null;
+  revoked_at: string | null;
+  school: number | null;
+  school_code: string | null;
+  created_at: string;
+}
+
+/** Public view of an invite, for the accept-signup page. */
+export interface InvitationPublic {
+  email: string;
+  school_name: string;
+  expires_at: string;
+}

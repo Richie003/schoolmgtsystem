@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { BookOpen, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Alert, Button, Field, inputClass } from '../UI/Primitives';
 
-export default function Login() {
+export default function Login({
+  onRequestAccess,
+  onHome,
+}: {
+  onRequestAccess?: () => void;
+  onHome?: () => void;
+}) {
   const { login, isLoading } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +29,16 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
+        {onHome && (
+          <button
+            type="button"
+            onClick={onHome}
+            className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </button>
+        )}
         <div className="mb-8 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-brand-600">
             <BookOpen className="h-8 w-8 text-white" />
@@ -77,6 +93,21 @@ export default function Login() {
           <p className="text-center text-xs text-gray-400">
             Accounts are created by your school administrator.
           </p>
+
+          {onRequestAccess && (
+            <div className="border-t border-gray-100 pt-4 text-center">
+              <p className="text-sm text-gray-500">
+                New school?{' '}
+                <button
+                  type="button"
+                  onClick={onRequestAccess}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Register your school
+                </button>
+              </p>
+            </div>
+          )}
         </form>
       </div>
     </div>

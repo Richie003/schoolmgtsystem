@@ -14,9 +14,12 @@ import type {
   ImportPreview,
   Notice,
   Paginated,
+  InvitationPublic,
   Question,
   QuestionBank,
   SchoolBranding,
+  SchoolInvitation,
+  SchoolSignupRequest,
   Staff,
   StaffRole,
   Student,
@@ -404,6 +407,60 @@ export const dataioAPI = {
 
   download: (kind: ImportKind, filters: Record<string, unknown> = {}) =>
     downloadCsv('/dataio/exports/download/', { kind, ...filters }, `${kind}.csv`),
+};
+
+// ---------------------------------------------------------------------------
+// Onboarding (school signup)
+// ---------------------------------------------------------------------------
+export const onboardingAPI = {
+  // Public
+  requestAccess: (data: {
+    school_name: string;
+    contact_name: string;
+    contact_email: string;
+    contact_phone?: string;
+    message?: string;
+  }) => api.post<{ detail: string }>('/onboarding/requests/', data),
+
+  validateInvite: (token: string) =>
+    api.get<InvitationPublic>(`/onboarding/invite/${encodeURIComponent(token)}/`),
+
+  acceptInvite: (
+    token: string,
+    data: {
+      username: string;
+      password: string;
+      first_name: string;
+      last_name: string;
+      school_name?: string;
+    },
+  ) =>
+    api.post<{ access: string; refresh: string; user: User }>(
+      `/onboarding/invite/${encodeURIComponent(token)}/accept/`,
+      data,
+    ),
+
+  // Super admin
+  requests: (params?: object) =>
+    api.get<Paginated<SchoolSignupRequest>>('/onboarding/requests/', { params }),
+  approveRequest: (
+    id: number,
+    data: { school_name?: string; email?: string; expires_days?: number } = {},
+  ) => api.post<SchoolInvitation>(`/onboarding/requests/${id}/approve/`, data),
+  rejectRequest: (id: number, reason?: string) =>
+    api.post<SchoolSignupRequest>(`/onboarding/requests/${id}/reject/`, { reason }),
+
+  invitations: (params?: object) =>
+    api.get<Paginated<SchoolInvitation>>('/onboarding/invitations/', { params }),
+  createInvitation: (data: {
+    email: string;
+    school_name: string;
+    expires_days?: number;
+  }) => api.post<SchoolInvitation>('/onboarding/invitations/', data),
+  revokeInvitation: (id: number) =>
+    api.post<SchoolInvitation>(`/onboarding/invitations/${id}/revoke/`),
+  resendInvitation: (id: number) =>
+    api.post<SchoolInvitation>(`/onboarding/invitations/${id}/resend/`),
 };
 
 export default api;

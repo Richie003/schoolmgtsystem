@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/staff/', include('staff.urls')),
     path('api/cbt/', include('cbt.urls')),
     path('api/dataio/', include('dataio.urls')),
+    path('api/onboarding/', include('onboarding.urls')),
 ]
 
 if settings.DEBUG:

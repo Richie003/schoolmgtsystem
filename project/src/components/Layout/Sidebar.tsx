@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Building2,
   CalendarRange,
   ClipboardCheck,
   Download,
@@ -36,6 +37,13 @@ export const menuItems: {
     label: 'Dashboard',
     icon: Home,
     roles: ['super_admin', 'school_admin', 'teacher', 'student'],
+  },
+  {
+    // Platform operator's home: review school signups and manage invitations.
+    id: 'onboarding',
+    label: 'Onboarding',
+    icon: Building2,
+    roles: ['super_admin'],
   },
   {
     id: 'students',

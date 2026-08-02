@@ -5,6 +5,8 @@ import type { Role, User } from '../types';
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<void>;
+  /** Adopt a session from tokens already obtained — e.g. accepting an invite. */
+  adoptSession: (access: string, refresh: string, user: User) => void;
   logout: () => void;
   isLoading: boolean;
   isInitializing: boolean;
@@ -71,6 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const adoptSession = useCallback(
+    (access: string, refresh: string, nextUser: User) => {
+      tokenStore.set(access, refresh);
+      setUser(nextUser);
+    },
+    [],
+  );
+
   const can = useCallback(
     (...roles: Role[]) => (user ? roles.includes(user.role) : false),
     [user],
@@ -78,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, login, logout, isLoading, isInitializing, can }}
+      value={{ user, login, adoptSession, logout, isLoading, isInitializing, can }}
     >
       {children}
     </AuthContext.Provider>

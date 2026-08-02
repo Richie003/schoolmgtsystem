@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'students',
     'cbt',
     'dataio',
+    'onboarding',
 ]
 
 MIDDLEWARE = [
@@ -162,6 +163,16 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.DefaultPagination',
     'PAGE_SIZE': 25,
     'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'core.throttling.ResilientScopedRateThrottle',
+    ],
+    # Only endpoints that set throttle_scope are limited; everything else is
+    # unaffected. The public school-signup form is the one anonymous write in
+    # the whole API, so it gets a tight cap to blunt spam and enumeration.
+    'DEFAULT_THROTTLE_RATES': {
+        'school_signup': config('SCHOOL_SIGNUP_THROTTLE', default='5/hour'),
+        'invite_accept': config('INVITE_ACCEPT_THROTTLE', default='10/hour'),
+    },
 }
 
 SIMPLE_JWT = {
@@ -213,6 +224,38 @@ CORS_ALLOWED_ORIGINS = config(
     cast=Csv(),
 )
 CORS_ALLOW_CREDENTIALS = True
+
+# ---------------------------------------------------------------------------
+# Email (custom SMTP; sent via Celery)
+# ---------------------------------------------------------------------------
+# In dev, default to the console backend so the whole invite flow is testable
+# without real SMTP credentials — emails print to the runserver console.
+# Set EMAIL_HOST (and the rest) in production to switch to real delivery.
+EMAIL_BACKEND = config(
+    'EMAIL_BACKEND',
+    default='django.core.mail.backends.smtp.EmailBackend'
+    if config('EMAIL_HOST', default='')
+    else 'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=15, cast=int)
+DEFAULT_FROM_EMAIL = config(
+    'DEFAULT_FROM_EMAIL', default='School Management <no-reply@localhost>'
+)
+
+# Base URL of the SPA, used to build invite links in emails. No trailing slash.
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173').rstrip('/')
+
+# Product name used in email subjects/bodies.
+PLATFORM_NAME = config('PLATFORM_NAME', default='School Management')
+
+# How long a school-signup invitation link stays valid.
+INVITE_EXPIRY_DAYS = config('INVITE_EXPIRY_DAYS', default=7, cast=int)
 
 # ---------------------------------------------------------------------------
 # Domain limits

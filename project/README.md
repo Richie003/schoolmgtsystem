@@ -41,6 +41,7 @@ project/
 ├── cbt/                   Subject, QuestionBank, Question, Choice, Exam,
 │                          ExamAttempt, StudentAnswer + exam engine + Celery tasks
 ├── dataio/                ImportJob, importers, exporters, Celery tasks
+├── onboarding/            School signup: requests, tokenised invitations, emails
 ├── tests/                 Backend test suite
 └── src/                   React SPA
 ```
@@ -194,9 +195,15 @@ The API is now at `http://localhost:8000/api/`.
 ### 2. Celery (second terminal)
 
 ```bash
-celery -A school_management worker -l info          # Windows: add --pool=solo
+celery -A school_management worker -l info          # solo pool auto-selected on Windows
 celery -A school_management beat -l info            # for the expiry sweeper
 ```
+
+> **Windows note:** the default `prefork` pool has no `fork()` on Windows and
+> crashes on every task (an unpack error, then a `WinError 5` on Python 3.14).
+> `celery.py` therefore defaults the worker to the single-process `solo` pool on
+> Windows automatically — no flag needed. Linux/production is untouched and keeps
+> prefork's real concurrency.
 
 Register the sweeper on a schedule (recommended — it catches attempts whose
 countdown task was lost to a broker restart):
@@ -327,6 +334,11 @@ endpoints are paginated (`?page=`, `?page_size=`, max 200) and support
 | GET | `/api/health/` | Unauthenticated health check |
 | GET | `/api/school/branding/` | Own school's colour and logo. Any member may read |
 | PATCH | `/api/school/branding/` | Change them. **School admin only** |
+| POST | `/api/onboarding/requests/` | Public — request access (a lead only) |
+| GET | `/api/onboarding/invite/{token}/` | Public — validate an invite link |
+| POST | `/api/onboarding/invite/{token}/accept/` | Public — complete signup → tenant + admin |
+| GET/POST | `/api/onboarding/requests/{id}/approve\|reject/` | **Super admin** — review leads |
+| GET/POST | `/api/onboarding/invitations/` | **Super admin** — manage / direct-invite |
 
 ---
 
@@ -632,6 +644,48 @@ demotion happens **before** the new row is written — the partial unique
 constraint (`one_current_session_per_school`) is evaluated during the write
 itself, so demoting afterwards never runs and the write fails with a 409.
 
+### School onboarding (invite-based signup)
+
+Schools do not self-register into a live tenant. The flow is **request →
+approve → emailed invite → accept**:
+
+1. A school submits the public **Request access** form (`onboarding` app). This
+   creates only a *lead* — it grants nothing and the response is deliberately
+   bland so it leaks no information.
+2. A platform **super admin** reviews leads in the Onboarding console and
+   approves one, which issues an **invitation** and emails a link.
+3. The recipient opens the link and completes signup, which **atomically**
+   creates the tenant and its first `school_admin`, then auto-logs them in.
+
+The whole security boundary is the invite token, handled like a password-reset
+secret:
+
+* **The raw token is never stored** — only its SHA-256 hash. A database leak
+  exposes no usable invites.
+* **Single-use, expiring, revocable.** Accepting consumes it; a resend rotates
+  it (killing the old link); expiry and revocation both invalidate it. All
+  failure modes collapse to a 404, so a dead link reveals nothing.
+* **Atomic acceptance under a row lock** — a link opened twice cannot create two
+  schools.
+
+**Emails go through your own SMTP via Celery** (`onboarding/tasks.py`). Two
+robustness properties are deliberate, because both failure modes were observed
+and fixed during the build:
+
+* **A broker outage must not silently drop an email.** `task.delay()` does *not*
+  raise when the broker is down — it loses the message. `dispatch()` therefore
+  probes broker reachability and, if it is down, sends the email **inline** so an
+  invitation is never lost. (In dev without a Celery worker, set
+  `CELERY_TASK_ALWAYS_EAGER=True`.)
+* **A cache outage must not 500 the public form.** DRF throttling stores its
+  counter in the cache (Redis); `core.throttling.ResilientScopedRateThrottle`
+  fails *open* if the cache is unreachable, so signup keeps working during an
+  infra incident (just unthrottled).
+
+In dev, leave `EMAIL_HOST` empty to print emails to the console instead of
+sending. A super admin's home screen is the Onboarding console, since they have
+no school of their own.
+
 ### Theming
 
 An admin sets **one** brand colour under Appearance. `src/utils/theme.ts`
@@ -712,7 +766,7 @@ python manage.py test tests --settings=tests.settings_test
 ```
 
 `tests/settings_test.py` uses SQLite, in-memory cache, and eager Celery, so the
-suite runs without Postgres or Redis. **144 tests**, weighted toward the things
+suite runs without Postgres or Redis. **181 tests**, weighted toward the things
 that would be expensive to get wrong:
 
 - `test_isolation.py` — cross-tenant reads/writes, forged `school` fields,
