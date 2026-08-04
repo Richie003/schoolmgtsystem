@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Default brand ramp — Tailwind's blue-600 family, as space-separated RGB
+ * channels so Tailwind opacity modifiers work.
+ *
+ * These are the values used before a school picks its own colour, and the
+ * fallback if branding fails to load. src/utils/theme.ts overwrites them at
+ * runtime with the ramp derived from the school's chosen colour.
+ */
+:root {
+  --brand-50: 239 246 255;
+  --brand-100: 219 234 254;
+  --brand-200: 191 219 254;
+  --brand-300: 147 197 253;
+  --brand-400: 96 165 250;
+  --brand-500: 59 130 246;
+  --brand-600: 37 99 235;
+  --brand-700: 29 78 216;
+  --brand-800: 30 64 175;
+  --brand-900: 30 58 138;
+  --brand-950: 23 37 84;
+  --brand-contrast: 255 255 255;
+}
+
+@layer utilities {
+  /*
+   * Scroll-reveal: elements start hidden and slid down, then transition into
+   * place when <Reveal> adds `is-visible` (once they enter the viewport). The
+   * transition-delay is set inline for stagger. Reduced motion shows content
+   * immediately with no movement.
+   */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Animated gradient text needs an oversized background to pan across. */
+  .animate-gradient-x {
+    background-size: 200% 200%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .animate-float,
+  .animate-blob,
+  .animate-gradient-x,
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   Dark theme for the logged-in app.
+
+   The app shell (MainApp root) carries a `.dark` class when dark
+   mode is on. Rather than sprinkle `dark:` variants across ~30
+   screens, we remap the handful of surface / text / border
+   utilities the app actually uses to dark equivalents, scoped
+   under `.dark`. Because these selectors are more specific than a
+   bare utility, they win without `!important`; and because they
+   are scoped to the shell, the marketing and auth screens (a
+   different subtree, no `.dark` ancestor) are untouched. New
+   screens built from the same utilities get dark mode for free.
+   ============================================================ */
+
+@layer base {
+  /* Defaults inside the shell: readable text, and a dark default border colour
+     (Tailwind's preflight otherwise defaults borders to a light grey). Kept in
+     the base layer so utility colours still win on ties. */
+  .dark {
+    color: rgb(209 213 219);
+  }
+  .dark * {
+    border-color: rgb(55 65 81);
+  }
+}
+
+/* --- Surfaces --- */
+.dark .bg-white { background-color: rgb(17 24 39); }   /* gray-900 */
+.dark .bg-gray-50 { background-color: rgb(3 7 18); }    /* gray-950 */
+.dark .bg-gray-100 { background-color: rgb(31 41 55); } /* gray-800 */
+.dark .bg-gray-200 { background-color: rgb(55 65 81); } /* gray-700 */
+
+/* Hover surfaces read lighter than the base surface, not darker. */
+.dark .hover\:bg-gray-50:hover { background-color: rgb(31 41 55); }
+.dark .hover\:bg-gray-100:hover { background-color: rgb(55 65 81); }
+.dark .hover\:bg-gray-200:hover { background-color: rgb(75 85 99); }
+
+/* --- Text --- */
+.dark .text-gray-900 { color: rgb(249 250 251); }
+.dark .text-gray-800 { color: rgb(243 244 246); }
+.dark .text-gray-700 { color: rgb(229 231 235); }
+.dark .text-gray-600 { color: rgb(209 213 219); }
+.dark .text-gray-500 { color: rgb(156 163 175); }
+.dark .text-gray-400 { color: rgb(107 114 128); }
+.dark .hover\:text-gray-900:hover { color: rgb(243 244 246); }
+.dark .hover\:text-gray-700:hover { color: rgb(209 213 219); }
+.dark .hover\:text-gray-600:hover { color: rgb(156 163 175); }
+.dark .hover\:text-gray-500:hover { color: rgb(156 163 175); }
+
+/* --- Borders & dividers --- */
+.dark .border-gray-100,
+.dark .border-gray-200 { border-color: rgb(31 41 55); }
+.dark .border-gray-300 { border-color: rgb(55 65 81); }
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(31 41 55); }
+
+/* --- Form controls --- */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: rgb(3 7 18);
+  color: rgb(243 244 246);
+  border-color: rgb(55 65 81);
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: rgb(107 114 128); }
+
+/* --- Brand-tinted surfaces (active nav, info alert, avatar) --- */
+.dark .bg-brand-50 { background-color: rgb(var(--brand-500) / 0.14); }
+.dark .bg-brand-100 { background-color: rgb(var(--brand-500) / 0.20); }
+.dark .hover\:bg-brand-50:hover { background-color: rgb(var(--brand-500) / 0.12); }
+.dark .text-brand-600 { color: rgb(var(--brand-400)); }
+.dark .text-brand-700,
+.dark .text-brand-800 { color: rgb(var(--brand-300)); }
+.dark .border-brand-200 { border-color: rgb(var(--brand-500) / 0.30); }
+
+/* --- Status pastels: light 50/100 fills → translucent; deep 700/800 text → bright --- */
+.dark .bg-green-50 { background-color: rgb(34 197 94 / 0.12); }
+.dark .bg-green-100 { background-color: rgb(34 197 94 / 0.16); }
+.dark .text-green-600,
+.dark .text-green-700,
+.dark .text-green-800 { color: rgb(134 239 172); }
+.dark .border-green-200 { border-color: rgb(34 197 94 / 0.25); }
+
+.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.12); }
+.dark .bg-red-100 { background-color: rgb(239 68 68 / 0.16); }
+.dark .text-red-600,
+.dark .text-red-700,
+.dark .text-red-800 { color: rgb(252 165 165); }
+.dark .border-red-200 { border-color: rgb(239 68 68 / 0.25); }
+
+.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.12); }
+.dark .bg-amber-100 { background-color: rgb(245 158 11 / 0.16); }
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 { color: rgb(252 211 77); }
+.dark .border-amber-200 { border-color: rgb(245 158 11 / 0.25); }
+
+.dark .bg-blue-50 { background-color: rgb(59 130 246 / 0.12); }
+.dark .bg-blue-100 { background-color: rgb(59 130 246 / 0.16); }
+.dark .text-blue-600,
+.dark .text-blue-700,
+.dark .text-blue-800 { color: rgb(147 197 253); }
+.dark .border-blue-200 { border-color: rgb(59 130 246 / 0.25); }
+
+.dark .bg-indigo-50 { background-color: rgb(99 102 241 / 0.12); }
+.dark .bg-indigo-100 { background-color: rgb(99 102 241 / 0.16); }
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-indigo-800 { color: rgb(165 180 252); }
+.dark .border-indigo-200 { border-color: rgb(99 102 241 / 0.25); }

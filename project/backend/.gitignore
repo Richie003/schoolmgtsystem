@@ -1,0 +1,24 @@
+# ---- Python / virtualenv ----
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---- Django runtime (local only) ----
+db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+celerybeat-schedule*
+
+# ---- Secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Logs ----
+logs
+*.log
