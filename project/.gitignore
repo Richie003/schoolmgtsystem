@@ -1,42 +1,21 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Repository-wide ignores. Each subproject has its own .gitignore for the
+# language-specific stuff:
+#   backend/.gitignore   — venv, __pycache__, db.sqlite3, media, .env …
+#   frontend/.gitignore  — node_modules, dist, .env …
 
-node_modules
-dist
-dist-ssr
-*.local
+# ---- Secrets (never commit a real env file anywhere) ----
+.env
+.env.*
+!.env.example
 
-# Editor directories and files
+# ---- OS / editor ----
+.DS_Store
+.idea
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
 *.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.sw?
-.env
-.env.local
 
-# Python
-venv/
-.venv/
-env/
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-
-# Django
-db.sqlite3
-*.sqlite3
-media/
-staticfiles/
-celerybeat-schedule*
+# ---- Logs ----
+logs
+*.log

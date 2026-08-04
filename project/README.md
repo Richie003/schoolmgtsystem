@@ -138,6 +138,21 @@ marks line in `save_answer` in `cbt/services.py`, and nowhere else.
 
 ---
 
+## Repository layout
+
+The backend and frontend are **separate, independently deployable projects** in
+one repo, so each can ship to its own server:
+
+```
+project/
+  backend/    # Django REST API  — deploy to an app server (see backend/README.md)
+  frontend/   # Vite React SPA    — deploy to a static host (see frontend/README.md)
+```
+
+They talk only over HTTP: the SPA calls the API at `VITE_API_BASE_URL`, and the
+API allows the SPA's origin via `CORS_ALLOWED_ORIGINS`. Nothing else is shared.
+Each folder has its own `README`, `.env.example` and `.gitignore`.
+
 ## Local setup
 
 ### Prerequisites
@@ -148,10 +163,10 @@ marks line in `save_answer` in `cbt/services.py`, and nowhere else.
 
 ### 1. Backend
 
-A virtual environment already exists at `project/venv` (Python 3.14). Activate it:
+A virtual environment already exists at `project/backend/venv` (Python 3.14). Activate it:
 
 ```bash
-cd project
+cd project/backend
 
 source venv/Scripts/activate      # Git Bash on Windows
 # venv\Scripts\activate           # PowerShell / cmd
@@ -224,14 +239,19 @@ CELERY_BEAT_SCHEDULE = {
 > tasks inline. Exams still work — auto-submit falls back to the sweeper and to
 > the server-side expiry check on every answer save.
 
-### 3. Frontend
+### 3. Frontend (third terminal)
 
 ```bash
+cd project/frontend
 npm install
 npm run dev                       # http://localhost:5173
 ```
 
-Point the SPA at a non-default API host with `VITE_API_BASE_URL` in `.env.local`.
+In dev the SPA is served from `:5173` and proxies `/api` + `/media` to the
+backend on `:8000` (see `frontend/vite.config.ts`), so no CORS setup is needed
+locally. For a non-default API host, set `VITE_API_BASE_URL` — required in
+production, where the SPA and API are on different servers. See
+[frontend/README.md](frontend/README.md).
 
 ### Demo credentials
 
