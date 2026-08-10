@@ -86,23 +86,25 @@ ASGI_APPLICATION = 'school_management.asgi.application'
 # Database
 # ---------------------------------------------------------------------------
 # PostgreSQL is the supported engine. DATABASE_URL keeps deploys 12-factor.
-# DATABASES = {
-#     'default': dj_database_url.config(
-#         default=config(
-#             'DATABASE_URL',
-#             default='postgres://postgres:postgres@localhost:5432/school_management',
-#         ),
-#         conn_max_age=600,
-#         conn_health_checks=True,
-#     )
-# }
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        "NAME": config("DATABASE_NAME"),
+        "USER": config("DATABASE_USER"),
+        "PASSWORD": config("DATABASE_PASSWORD"),
+        "HOST": config("DATABASE_HOST"),
+        "PORT": config("DATABASE_PORT"),
+        "ENGINE": "django.db.backends.postgresql",
+        "CONN_MAX_AGE": 600,
+        "CONN_HEALTH_CHECKS": True,
     }
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
