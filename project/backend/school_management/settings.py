@@ -87,18 +87,15 @@ ASGI_APPLICATION = 'school_management.asgi.application'
 # ---------------------------------------------------------------------------
 # PostgreSQL is the supported engine. DATABASE_URL keeps deploys 12-factor.
 DATABASES = {
-    'default': {
-        "NAME": config("DATABASE_NAME"),
-        "USER": config("DATABASE_USER"),
-        "PASSWORD": config("DATABASE_PASSWORD"),
-        "HOST": config("DATABASE_HOST"),
-        "PORT": config("DATABASE_PORT"),
-        "ENGINE": "django.db.backends.postgresql",
-        "CONN_MAX_AGE": 600,
-        "CONN_HEALTH_CHECKS": True,
-    }
+    'default': dj_database_url.config(
+        default=config(
+            'DATABASE_HOST',
+            default=config("DATABASE_HOST"),
+        ),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
-
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.sqlite3',
@@ -138,12 +135,30 @@ STORAGES = {
 }
 
 if USE_S3:
-    # Uploaded CSVs and any other media go straight to S3 in production.
+    # Uploaded CSVs, logos and question images go to Supabase Storage in
+    # production. Supabase exposes an S3-compatible API, so this uses the same
+    # django-storages S3 backend — the S3 credentials below are the ones from
+    # Supabase → Storage → S3 Access Keys, and AWS_S3_ENDPOINT_URL points at the
+    # project's S3 endpoint. Leaving AWS_S3_ENDPOINT_URL empty targets real AWS S3.
     AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
     AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
     AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-east-1')
+
+    # e.g. https://<project-ref>.supabase.co/storage/v1/s3
+    _s3_endpoint = config('AWS_S3_ENDPOINT_URL', default='')
+    AWS_S3_ENDPOINT_URL = _s3_endpoint or None
+    # Supabase (like most S3-compatible providers) only supports path-style
+    # addressing; real AWS uses virtual-hosted style.
+    AWS_S3_ADDRESSING_STYLE = config(
+        'AWS_S3_ADDRESSING_STYLE',
+        default='path' if _s3_endpoint else 'virtual',
+    )
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
+    # Serve everything through short-lived signed URLs so a private bucket stays
+    # private (Supabase presigns against the same S3 endpoint).
     AWS_QUERYSTRING_AUTH = True
     AWS_QUERYSTRING_EXPIRE = 3600
     STORAGES['default'] = {'BACKEND': 'storages.backends.s3.S3Storage'}
