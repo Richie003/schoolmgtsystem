@@ -160,6 +160,18 @@ class QuestionSerializer(TenantValidatedSerializer):
         return instance
 
 
+class QuestionImageSerializer(serializers.Serializer):
+    """Validates an uploaded question image. Kept separate so the image travels
+    as multipart, away from the nested-choices JSON of the main serializer."""
+
+    image = serializers.ImageField()
+
+    def validate_image(self, value):
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError('Image must be smaller than 2 MB.')
+        return value
+
+
 class ExamSerializer(TenantValidatedSerializer):
     tenant_fields = ('subject', 'bank', 'session', 'term')
 

@@ -205,6 +205,7 @@ export interface Question {
   bank: number;
   question_type: QuestionType;
   text: string;
+  image: string | null;
   marks: number;
   difficulty: 'easy' | 'medium' | 'hard';
   explanation: string;
