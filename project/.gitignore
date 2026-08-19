@@ -19,3 +19,6 @@
 # ---- Logs ----
 logs
 *.log
+*.docx
+PROPOSAL-Topline.md
+PROPOSAL.md

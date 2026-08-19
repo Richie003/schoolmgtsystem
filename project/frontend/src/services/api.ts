@@ -329,6 +329,17 @@ export const cbtAPI = {
     api.patch<Question>(`/cbt/questions/${id}/`, data),
   removeQuestion: (id: number) => api.delete(`/cbt/questions/${id}/`),
 
+  /** Image upload/removal is multipart, kept off the nested-choices JSON. */
+  uploadQuestionImage: (id: number, image: File) => {
+    const form = new FormData();
+    form.append('image', image);
+    return api.post<Question>(`/cbt/questions/${id}/image/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  removeQuestionImage: (id: number) =>
+    api.delete<Question>(`/cbt/questions/${id}/image/`),
+
   exams: (params?: object) => api.get<Paginated<Exam>>('/cbt/exams/', { params }),
   createExam: (data: object) => api.post<Exam>('/cbt/exams/', data),
   updateExam: (id: number, data: object) => api.patch<Exam>(`/cbt/exams/${id}/`, data),

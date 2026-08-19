@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { GripVertical, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { cbtAPI, errorMessage } from '../../services/api';
 import type { Choice, Question, QuestionType } from '../../types';
 import { Alert, Button, Field, Modal, inputClass } from '../UI/Primitives';
@@ -75,6 +75,13 @@ export default function QuestionEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Image is handled apart from the draft: a new File to upload, a preview URL
+  // (existing image or an object URL for a freshly picked file), and a flag for
+  // "the existing image was removed".
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const explanationRef = useRef<HTMLTextAreaElement>(null);
 
@@ -82,7 +89,23 @@ export default function QuestionEditor({
     if (!open) return;
     setDraft(question ? toDraft(question) : { ...BLANK, options: BLANK.options.map((o) => ({ ...o })) });
     setError('');
+    setImageFile(null);
+    setImageRemoved(false);
+    setImagePreview(question?.image ?? null);
   }, [open, question]);
+
+  // Free the object URL of a picked file when it's replaced or the modal closes.
+  useEffect(() => {
+    return () => {
+      if (imagePreview?.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
+  const pickImage = (file: File | null) => {
+    setImageFile(file);
+    setImageRemoved(file === null);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+  };
 
   const filled = draft.options.filter((o) => o.text.trim());
   const correctCount = filled.filter((o) => o.is_correct).length;
@@ -185,13 +208,24 @@ export default function QuestionEditor({
         choices,
       };
 
+      let savedId: number;
       if (question) {
         await cbtAPI.updateQuestion(question.id, payload);
-        onSaved('Question updated.');
+        savedId = question.id;
       } else {
-        await cbtAPI.createQuestion(payload);
-        onSaved('Question added.');
+        const { data } = await cbtAPI.createQuestion(payload);
+        savedId = data.id;
       }
+
+      // Second request only when the image changed — a newly picked file wins;
+      // otherwise an existing image that was removed is cleared.
+      if (imageFile) {
+        await cbtAPI.uploadQuestionImage(savedId, imageFile);
+      } else if (question && imageRemoved && question.image) {
+        await cbtAPI.removeQuestionImage(savedId);
+      }
+
+      onSaved(question ? 'Question updated.' : 'Question added.');
     } catch (err) {
       setError(errorMessage(err, 'Could not save this question.'));
     } finally {
@@ -248,6 +282,48 @@ export default function QuestionEditor({
           textareaRef={questionRef}
           placeholder="A body of mass $m$ accelerates at $a$. Find the force."
         />
+
+        <div>
+          <span className="mb-2 block text-sm font-medium text-gray-700">
+            Question image (optional)
+          </span>
+          {imagePreview ? (
+            <div className="flex items-start gap-3">
+              <img
+                src={imagePreview}
+                alt=""
+                className="max-h-40 max-w-full rounded-lg border border-gray-200"
+              />
+              <button
+                type="button"
+                onClick={() => pickImage(null)}
+                aria-label="Remove image"
+                className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <label
+              className="flex cursor-pointer items-center gap-2 rounded-lg border-2
+                border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500
+                hover:border-brand-400 hover:bg-gray-50"
+            >
+              <ImagePlus className="h-5 w-5 shrink-0" />
+              Add a diagram, figure or chart — PNG/JPG, up to 2&nbsp;MB
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) pickImage(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Marks">

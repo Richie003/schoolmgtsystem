@@ -4,6 +4,7 @@ from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.models import Role
@@ -23,6 +24,7 @@ from cbt.serializers import (
     ExamSerializer,
     ExamStudentSerializer,
     QuestionBankSerializer,
+    QuestionImageSerializer,
     QuestionSerializer,
     SaveAnswerSerializer,
     SubjectSerializer,
@@ -93,6 +95,34 @@ class QuestionViewSet(TenantModelViewSet):
     def perform_create(self, serializer):
         serializer.save(
             school_id=self.request.user.school_id, created_by=self.request.user
+        )
+
+    @action(
+        detail=True,
+        methods=['post', 'delete'],
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def image(self, request, pk=None):
+        """Attach or remove a question's image.
+
+        Kept separate from create/update so the image can be sent as multipart,
+        without having to serialise the nested choices into form fields.
+        """
+        question = self.get_object()
+
+        if request.method == 'DELETE':
+            if question.image:
+                question.image.delete(save=False)
+                question.image = None
+                question.save(update_fields=['image', 'updated_at'])
+        else:
+            serializer = QuestionImageSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            question.image = serializer.validated_data['image']
+            question.save(update_fields=['image', 'updated_at'])
+
+        return Response(
+            QuestionSerializer(question, context=self.get_serializer_context()).data
         )
 
 
