@@ -29,6 +29,8 @@ const AcademicsManager = lazy(() => import('./components/Academics/AcademicsMana
 const CBTManager = lazy(() => import('./components/CBT/CBTManager'));
 const QuestionGenerator = lazy(() => import('./components/CBT/QuestionGenerator'));
 const ResultsManager = lazy(() => import('./components/Results/ResultsManager'));
+const LiveManager = lazy(() => import('./components/Live/LiveManager'));
+const PlayerApp = lazy(() => import('./components/Live/PlayerApp'));
 const ImportManager = lazy(() => import('./components/DataIO/ImportManager'));
 const ExportManager = lazy(() => import('./components/DataIO/ExportManager'));
 const AppearanceSettings = lazy(() => import('./components/Settings/AppearanceSettings'));
@@ -92,6 +94,8 @@ function MainApp() {
         return <QuestionGenerator />;
       case 'results':
         return <ResultsManager />;
+      case 'live':
+        return <LiveManager />;
       case 'import':
         return <ImportManager />;
       case 'export':
@@ -169,6 +173,8 @@ function UnauthenticatedApp() {
 
   const screen = () => {
     switch (view) {
+      case 'join':
+        return <PlayerApp onExit={() => navigate('home')} />;
       case 'features':
         return <Features onNavigate={navigate} />;
       case 'about':

@@ -120,7 +120,7 @@ function StaffMock() {
       <div className="mt-3 rounded-lg border border-brand-500/20 bg-brand-500/[0.07] p-3">
         <div className="flex items-center gap-2">
           <Pin className="h-3.5 w-3.5 text-brand-300" />
-          <p className="text-xs font-semibold text-white">PTA meeting — Friday, 2:00pm</p>
+          <p className="text-xs font-semibold text-white">PTA meeting · Friday, 2:00pm</p>
         </div>
         <p className="mt-1 text-[11px] text-gray-400">Pinned to noticeboard · assigned to 3 staff</p>
       </div>
@@ -186,6 +186,61 @@ function CbtMock() {
   );
 }
 
+function LiveMock() {
+  const opts = [
+    { key: 'A', text: 'Oxygen', spine: '#e0533d' },
+    { key: 'B', text: 'Carbon dioxide', spine: '#2f9e8f', correct: true },
+    { key: 'C', text: 'Nitrogen', spine: '#d9a441' },
+    { key: 'D', text: 'Hydrogen', spine: '#6a5acd' },
+  ];
+  return (
+    <Window title="Live quiz · presenter">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-wider text-gray-300">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          LIVE
+        </span>
+        <span className="font-mono text-[11px] tabular-nums text-gray-400">03 / 10 · 0:14</span>
+      </div>
+      <p className="mt-2 text-xs font-semibold leading-snug text-white">
+        Which gas do plants mainly take in for photosynthesis?
+      </p>
+      {/* Answers as a monospace-keyed ledger — not four colour-blocked tiles. */}
+      <div className="mt-3 space-y-1">
+        {opts.map((o) => (
+          <div
+            key={o.key}
+            className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs ${
+              o.correct ? 'bg-brand-500/10' : ''
+            }`}
+          >
+            {o.correct ? (
+              <span className="flex h-6 w-6 items-center justify-center rounded bg-brand-500 font-mono text-[11px] font-bold text-brand-contrast">
+                {o.key}
+              </span>
+            ) : (
+              <span
+                className="flex h-6 w-6 items-center justify-center rounded font-mono text-[11px] font-bold"
+                style={{ background: `${o.spine}26`, color: o.spine, boxShadow: `inset 0 0 0 1px ${o.spine}80` }}
+              >
+                {o.key}
+              </span>
+            )}
+            <span className={o.correct ? 'flex-1 font-medium text-white' : 'flex-1 text-gray-400'}>
+              {o.text}
+            </span>
+            {o.correct && <Check className="h-3.5 w-3.5 text-brand-300" />}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2.5 font-mono text-[11px] text-gray-500">
+        <span>05 / 07 answered</span>
+        <span className="text-brand-300">quicksilver · 4180</span>
+      </div>
+    </Window>
+  );
+}
+
 function AcademicsMock() {
   const subjects = ['Mathematics', 'English', 'Physics', 'Chemistry', 'Biology'];
   return (
@@ -245,9 +300,9 @@ function DataIoMock() {
       </div>
       <div className="mt-3 space-y-1.5">
         {[
-          { ok: true, text: 'Amina Bello — JSS1 A' },
-          { ok: true, text: 'Chidi Okeke — JSS2 B' },
-          { ok: false, text: 'Row 14 — unknown class “JSS9”' },
+          { ok: true, text: 'Amina Bello · JSS1 A' },
+          { ok: true, text: 'Chidi Okeke · JSS2 B' },
+          { ok: false, text: 'Row 14 · unknown class “JSS9”' },
         ].map((r) => (
           <div
             key={r.text}
@@ -381,6 +436,7 @@ const MOCKS: Record<string, () => JSX.Element> = {
   students: StudentsMock,
   staff: StaffMock,
   cbt: CbtMock,
+  live: LiveMock,
   academics: AcademicsMock,
   dataio: DataIoMock,
   security: SecurityMock,

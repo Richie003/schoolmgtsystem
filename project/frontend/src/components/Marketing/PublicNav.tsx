@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { GraduationCap, Menu, X } from 'lucide-react';
 
 /** The routable screens available before signing in. */
-export type PublicView = 'home' | 'features' | 'about' | 'login' | 'request';
+export type PublicView = 'home' | 'features' | 'about' | 'login' | 'request' | 'join';
 
 export const PRODUCT_NAME = 'NlightR';
 
@@ -82,6 +82,15 @@ export default function PublicNav({
           ))}
           <button
             type="button"
+            onClick={() => go('join')}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              active === 'join' ? 'text-brand-400' : 'text-gray-300 hover:text-white'
+            }`}
+          >
+            Join a quiz
+          </button>
+          <button
+            type="button"
             onClick={() => go('login')}
             className="ml-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-300 hover:text-white"
           >
@@ -119,6 +128,13 @@ export default function PublicNav({
               {link.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => go('join')}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white"
+          >
+            Join a quiz
+          </button>
           <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
             <button
               type="button"

@@ -28,6 +28,10 @@ import type {
   ReportRow,
   ReportCardData,
   ReportTemplateSettings,
+  LiveSession,
+  LiveHostState,
+  LivePlayerState,
+  LiveJoinResult,
   SchoolBranding,
   SchoolInvitation,
   SchoolSignupRequest,
@@ -78,6 +82,20 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
+});
+
+/**
+ * A separate client for the live-quiz *player* endpoints.
+ *
+ * Players are guests — they have no account and no JWT. Using the main `api`
+ * would attach a stale bearer token (if a logged-in user happens to be
+ * playing) and, worse, drag a 401 through the refresh-or-logout interceptor.
+ * These endpoints are AllowAny on the server, so this instance stays bare:
+ * identity travels in the PIN + player token, never a header.
+ */
+const publicApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
 });
 
 /**
@@ -470,6 +488,36 @@ export const resultsAPI = {
   template: () => api.get<ReportTemplateSettings>('/results/template/'),
   updateTemplate: (data: Partial<ReportTemplateSettings>) =>
     api.patch<ReportTemplateSettings>('/results/template/', data),
+};
+
+// ---------------------------------------------------------------------------
+// Live quiz (Kahoot-style)
+// ---------------------------------------------------------------------------
+export const liveAPI = {
+  // -- host (authenticated staff) --
+  sessions: (params?: object) =>
+    api.get<Paginated<LiveSession>>('/live/sessions/', { params }),
+  createSession: (data: {
+    bank: number; title?: string; seconds_per_question?: number;
+    points_base?: number; speed_bonus?: boolean;
+  }) => api.post<LiveSession>('/live/sessions/', data),
+  removeSession: (id: number) => api.delete(`/live/sessions/${id}/`),
+  hostState: (id: number) => api.get<LiveHostState>(`/live/sessions/${id}/state/`),
+  start: (id: number) => api.post<LiveHostState>(`/live/sessions/${id}/start/`),
+  reveal: (id: number) => api.post<LiveHostState>(`/live/sessions/${id}/reveal/`),
+  next: (id: number) => api.post<LiveHostState>(`/live/sessions/${id}/next/`),
+  end: (id: number) => api.post<LiveHostState>(`/live/sessions/${id}/end/`),
+
+  // -- player (guest, no auth) --
+  join: (pin: string, nickname: string) =>
+    publicApi.post<LiveJoinResult>(`/live/play/${pin}/join/`, { nickname }),
+  playerState: (pin: string, token: string) =>
+    publicApi.get<LivePlayerState>(`/live/play/${pin}/state/`, { params: { token } }),
+  answer: (pin: string, token: string, choice_ids: number[]) =>
+    publicApi.post<{ received: boolean; response_ms: number }>(
+      `/live/play/${pin}/answer/`,
+      { token, choice_ids },
+    ),
 };
 
 export const dataioAPI = {

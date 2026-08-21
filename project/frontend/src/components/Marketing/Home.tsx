@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: Users,
     title: 'Student management',
-    body: 'Enrolment, rich profiles and weekday attendance — with secure, logged checkouts so you always know who left and when.',
+    body: 'Enrol students, keep rich profiles, and take attendance on weekdays. Every checkout is logged too, so you always know who left and when.',
   },
   {
     icon: CalendarCheck,
@@ -29,7 +29,7 @@ const FEATURES = [
   {
     icon: MonitorCheck,
     title: 'Computer-based testing',
-    body: 'Timed online exams that auto-submit and auto-grade — and render mathematics and physics formulas without breaking them.',
+    body: 'Run timed online exams that submit and grade themselves. Even maths and physics formulas render beautifully, without ever breaking a question.',
   },
   {
     icon: Database,
@@ -39,7 +39,7 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     title: 'Isolated & secure',
-    body: 'Every school lives in its own space. One school can never see another’s students, staff or results — enforced at every layer.',
+    body: 'Every school lives in its own space, so one school can never see another’s students, staff or results. We enforce that at every layer, not just on the screen.',
   },
   {
     icon: Palette,
@@ -66,7 +66,7 @@ const STEPS = [
   },
   {
     title: 'Run your school',
-    body: 'Create your admin account, then add students, staff and exams — you are live the same day.',
+    body: 'Create your admin account, then add your students, staff and exams. Most schools are up and running the very same day.',
   },
 ];
 
@@ -120,9 +120,9 @@ export default function Home({
               className="mt-5 max-w-xl animate-fade-up text-lg leading-relaxed text-gray-400"
               style={{ animationDelay: '160ms' }}
             >
-              {PRODUCT_NAME} brings students, staff, attendance and computer-based
-              testing together in a single, secure platform — built for the way
-              African schools actually work.
+              {PRODUCT_NAME} brings your students, staff, attendance and
+              computer-based testing together in one secure place, built for the
+              way African schools really work.
             </p>
 
             <div
@@ -233,8 +233,8 @@ export default function Home({
             Everything a school needs. Nothing it doesn’t.
           </h2>
           <p className="mt-4 text-lg text-gray-400">
-            Four focused modules that work together — instead of ten you’ll never
-            switch on.
+            A handful of focused modules that genuinely work together, instead of
+            ten you’ll never switch on.
           </p>
         </Reveal>
 

@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/cbt/', include('cbt.urls')),
     path('api/cbt-gen/', include('cbtgen.urls')),
     path('api/results/', include('results.urls')),
+    path('api/live/', include('live.urls')),
     path('api/dataio/', include('dataio.urls')),
     path('api/onboarding/', include('onboarding.urls')),
 ]

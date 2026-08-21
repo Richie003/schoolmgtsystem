@@ -517,6 +517,53 @@ export interface ReportTemplateSettings {
   show_remarks: boolean; show_traits: boolean; traits: string[]; is_premium: boolean;
 }
 
+// --- Live quiz (Kahoot-style) ---
+export type LiveStatus = 'lobby' | 'question' | 'reveal' | 'ended';
+
+export interface LiveSession {
+  id: number; title: string; bank: number; bank_name: string; subject_name: string;
+  pin: string; status: LiveStatus; current_index: number; question_count: number;
+  player_count: number; seconds_per_question: number; points_base: number;
+  speed_bonus: boolean; created_at: string;
+}
+
+export interface LiveChoice { id: number; text: string }
+export interface LiveQuestion {
+  id: number; type: QuestionType; multiple: boolean; text: string;
+  image: string | null; choices: LiveChoice[];
+}
+
+export interface LiveScoreRow { rank: number; nickname: string; score: number }
+export interface LivePlayerRow { nickname: string; score: number; streak: number }
+
+/** The host's presenter poll. */
+export interface LiveHostState {
+  id: number; status: LiveStatus; pin: string; title: string; accent: string;
+  question_index: number; question_count: number; seconds_per_question: number;
+  player_count: number; players: LivePlayerRow[];
+  question?: LiveQuestion; answered_count?: number;
+  deadline?: string; server_time?: string;
+  correct_choice_ids?: number[]; distribution?: Record<string, number>;
+  scoreboard?: LiveScoreRow[]; podium?: LiveScoreRow[];
+}
+
+/** A player's phone poll. */
+export interface LivePlayerState {
+  status: LiveStatus; pin: string; title: string; accent: string;
+  question_index: number; question_count: number;
+  you: { nickname: string; score: number; streak: number; rank: number };
+  players_count?: number;
+  deadline?: string; server_time?: string; seconds_per_question?: number;
+  question?: LiveQuestion; answered?: boolean; your_choices?: number[];
+  correct_choice_ids?: number[];
+  result?: { answered: boolean; is_correct: boolean; points: number; your_choices: number[] };
+  scoreboard?: LiveScoreRow[]; podium?: LiveScoreRow[];
+}
+
+export interface LiveJoinResult {
+  token: string; nickname: string; pin: string; title: string; status: LiveStatus;
+}
+
 export type SignupRequestStatus = 'pending' | 'approved' | 'rejected';
 export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
 
