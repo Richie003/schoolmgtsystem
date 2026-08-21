@@ -22,6 +22,12 @@ import type {
   GenOptions,
   Question,
   QuestionBank,
+  GradingScheme,
+  ResultSheet,
+  ResultGrid,
+  ReportRow,
+  ReportCardData,
+  ReportTemplateSettings,
   SchoolBranding,
   SchoolInvitation,
   SchoolSignupRequest,
@@ -423,6 +429,47 @@ export const cbtGenAPI = {
       data,
     ),
   discard: (id: number) => api.post(`/cbt-gen/jobs/${id}/discard/`),
+};
+
+// ---------------------------------------------------------------------------
+// Results & report cards
+// ---------------------------------------------------------------------------
+export const resultsAPI = {
+  schemes: () => api.get<Paginated<GradingScheme>>('/results/schemes/'),
+  defaultScheme: () => api.get<GradingScheme>('/results/schemes/default/'),
+  updateScheme: (id: number, data: Partial<GradingScheme>) =>
+    api.patch<GradingScheme>(`/results/schemes/${id}/`, data),
+
+  sheets: (params?: object) =>
+    api.get<Paginated<ResultSheet>>('/results/sheets/', { params }),
+  createSheet: (data: {
+    classroom: number; term: number; subjects: number[]; next_term_begins?: string | null;
+  }) => api.post<ResultSheet>('/results/sheets/', data),
+  grid: (id: number) => api.get<ResultGrid>(`/results/sheets/${id}/grid/`),
+  saveScores: (
+    id: number,
+    rows: { student: number; subject: number; scores?: Record<string, number>; teacher_remark?: string }[],
+  ) => api.post<{ saved: number }>(`/results/sheets/${id}/scores/`, { rows }),
+  autofillCbt: (id: number) =>
+    api.post<{ filled: number }>(`/results/sheets/${id}/autofill-cbt/`),
+  submit: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/submit/`),
+  cumulate: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/cumulate/`),
+  review: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/review/`),
+  publish: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/publish/`),
+  unpublish: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/unpublish/`),
+  reopen: (id: number) => api.post<ResultSheet>(`/results/sheets/${id}/reopen/`),
+  sheetReports: (id: number) => api.get<ReportRow[]>(`/results/sheets/${id}/reports/`),
+
+  report: (id: number) => api.get<ReportCardData>(`/results/reports/${id}/`),
+  saveRemark: (
+    id: number,
+    data: { class_teacher_remark?: string; principal_remark?: string; traits?: Record<string, string> },
+  ) => api.patch<ReportCardData>(`/results/reports/${id}/remark/`, data),
+  myReports: () => api.get<ReportRow[]>('/results/reports/mine/'),
+
+  template: () => api.get<ReportTemplateSettings>('/results/template/'),
+  updateTemplate: (data: Partial<ReportTemplateSettings>) =>
+    api.patch<ReportTemplateSettings>('/results/template/', data),
 };
 
 export const dataioAPI = {
