@@ -15,8 +15,8 @@ export default function PublicFooter({
           <div className="max-w-sm">
             <BrandMark onClick={() => onNavigate('home')} />
             <p className="mt-3 text-sm leading-relaxed">
-              The school operating system for modern African schools — students,
-              staff, attendance and computer-based testing in one place.
+              The school operating system for modern African schools. Students,
+              staff, attendance and computer-based testing, all in one place.
             </p>
           </div>
 

@@ -6,6 +6,7 @@ import {
   CalendarRange,
   Check,
   Database,
+  Gamepad2,
   GraduationCap,
   LayoutGrid,
   Minus,
@@ -46,12 +47,12 @@ const FEATURES: Feature[] = [
     eyebrow: 'Student management',
     title: 'Every student, on the record',
     intro:
-      'Enrol students, keep rich profiles, and track who is present and who has gone home — all tied to the right class, term and session.',
+      'Enrol students, keep rich profiles, and track who is present and who has gone home, all tied to the right class, term and session.',
     points: [
       'Unique admission numbers per school, with class and arm on every profile.',
       'Weekday attendance: one clean record per student per day, never a weekend.',
       'Each attendance row is tagged with its term and session, so per-term reports need no date-range gymnastics.',
-      'After-school checkouts log exactly who left and when — one record per student per day.',
+      'After-school checkouts log exactly who left and when, with one clean record per student per day.',
       'Optionally link a student to a login so they can sit computer-based exams.',
     ],
     facts: [
@@ -70,9 +71,9 @@ const FEATURES: Feature[] = [
       'Manage teachers and staff, decide exactly what each teacher can touch, and keep everyone aligned with a school-wide noticeboard.',
     points: [
       'Staff profiles attached to real login accounts, with descriptive job titles like “Head of Science”.',
-      'Job titles are kept separate from security roles — schools can’t invent permission levels, so who-can-do-what stays auditable.',
+      'Job titles stay separate from security roles, so schools can’t invent permission levels and who-can-do-what stays easy to audit.',
       'Teacher-to-class assignments are the real boundary: a teacher only sees the classes assigned to them, enforced in the data layer, not just hidden in the UI.',
-      'A noticeboard for announcements — assign a notice to turn it into a pending task.',
+      'A school-wide noticeboard for announcements, and you can assign a notice to turn it into a task someone owns.',
     ],
     facts: [
       { label: 'Titles', value: 'Descriptive' },
@@ -85,19 +86,19 @@ const FEATURES: Feature[] = [
     id: 'cbt',
     icon: GraduationCap,
     eyebrow: 'Computer-based testing',
-    title: 'Exams that grade themselves — and never break',
+    title: 'Exams that grade themselves, and never break',
     intro:
-      'A full CBT engine: build question banks, run timed online exams, and get results the moment the clock stops — with timing you can trust.',
+      'A complete CBT engine: build question banks, run timed online exams, and get results the moment the clock stops, with timing you can trust.',
     points: [
       'Question banks per subject, with single-answer (radio) or multiple-answer (“select all that apply”) questions, two to eight options each.',
-      'Edit and delete questions any time — correctness is frozen onto each student’s answer when they save, so fixing a question never rewrites past results.',
+      'Edit or delete questions any time. Correctness is frozen onto each student’s answer the moment they save, so fixing a question never rewrites past results.',
       'Multi-answer questions mark all-or-nothing: every correct option, no incorrect one.',
       'Mathematics and physics formulas render properly, inline and as blocks, without breaking the question.',
       'Every paper is randomised then frozen, so a refresh, a reconnect, or an automatic submission all see the exact same exam.',
       'Timing is server-authoritative: a paused tab or a tampered device clock buys no extra time, and the countdown resyncs automatically.',
-      'Answers auto-save every couple of seconds and re-try on a flaky connection — a bad network becomes a delay, not lost work.',
+      'Answers save themselves every couple of seconds and retry on a shaky connection, so a bad network means a short delay, never lost work.',
       'Three independent safeguards guarantee an exam always closes on time, and retakes are capped by a per-exam attempt limit.',
-      'Answer keys never cross the wire — the paper a student receives simply doesn’t contain which option is correct.',
+      'Answer keys never cross the wire. The paper a student receives simply doesn’t say which option is correct.',
     ],
     facts: [
       { label: 'Question types', value: 'Single / multiple' },
@@ -107,14 +108,38 @@ const FEATURES: Feature[] = [
     ],
   },
   {
+    id: 'live',
+    icon: Gamepad2,
+    eyebrow: 'Live quiz',
+    title: 'Turn any question bank into a live game',
+    intro:
+      'A fast, hosted quiz mode that feels more like a game show than a worksheet. The class joins on their phones with a PIN and races to answer, while the whole room watches a live leaderboard on the big screen.',
+    points: [
+      'Host any question bank you already have as a live game, so there’s no new content to build.',
+      'Players join in seconds with a PIN and a nickname; no account needed, so guests and whole classes can jump in.',
+      'Everyone answers the same question at the same time, with the host setting the pace from a shared display.',
+      'Scoring rewards fast, correct answers with streak bonuses, and response time is measured on the server so a laggy phone can’t game it.',
+      'Correct answers never reach a player’s phone until the reveal, so there’s no peeking.',
+      'A live answer distribution and a between-question leaderboard build to a final podium.',
+      'Just for fun by design: live games never touch grades, attendance or report cards.',
+      'The whole stage wears your school’s brand colour, streamed to every player.',
+    ],
+    facts: [
+      { label: 'Join', value: 'PIN + nickname' },
+      { label: 'Scoring', value: 'Speed + streak' },
+      { label: 'Answers', value: 'Hidden till reveal' },
+      { label: 'Grades', value: 'Never affected' },
+    ],
+  },
+  {
     id: 'academics',
     icon: CalendarRange,
     eyebrow: 'Academic structure',
-    title: 'Sessions, terms and subjects — set once',
+    title: 'Sessions, terms and subjects, set once',
     intro:
       'Lay down your academic calendar once, and everything else hangs off it correctly.',
     points: [
-      'Academic sessions (years) and terms, with exactly one “current” of each enforced by the database — never an ambiguous active term.',
+      'Academic sessions and terms, with exactly one “current” of each enforced by the database, so you never end up with an ambiguous active term.',
       'Subjects and classrooms (class plus arm), unique within your school.',
       'Attendance and exams automatically inherit the active term and session, so reporting stays consistent.',
     ],
@@ -134,12 +159,12 @@ const FEATURES: Feature[] = [
       'Move records in and out by CSV, with a preview you can trust and errors you can actually act on.',
     points: [
       'Import students, staff, questions, attendance and checkouts from CSV.',
-      'Preview before you save — the preview is produced by the very same checks the import relies on, so what you approve is what you get.',
+      'Preview everything before you save. That preview runs the very same checks the import relies on, so what you approve is exactly what you get.',
       'One bad row doesn’t sink the file: valid rows import, and invalid ones are reported by line number.',
       'File-level mistakes (missing headers, unknown columns, an empty file) are rejected outright, so nothing is silently dropped.',
       'Re-importing updates existing records instead of duplicating them, keyed on admission number.',
       'Large files are processed in the background, and messy Excel encodings are handled without fuss.',
-      'Download a blank template for any dataset, and export mirrors the same shapes — exported questions re-import cleanly.',
+      'Download a blank template for any dataset, and exports mirror the same shapes, so exported questions import straight back in.',
     ],
     facts: [
       { label: 'Datasets', value: '5 supported' },
@@ -156,10 +181,10 @@ const FEATURES: Feature[] = [
     intro:
       'Multi-tenant to the core: your school’s data is yours alone, and the separation is built into every layer.',
     points: [
-      'One school can never see another’s students, staff, exams or results — full stop.',
+      'One school can never see another’s students, staff, exams or results. Full stop.',
       'Isolation is enforced at the model, query, create and serialisation layers, so it isn’t something a single screen can forget.',
-      'A request for another school’s record returns “not found”, not “forbidden” — the platform won’t even confirm it exists.',
-      'Four clearly-scoped roles — platform admin, school admin, teacher and student — each see only what they should.',
+      'Ask for another school’s record and you get “not found”, not “forbidden”, so the platform won’t even confirm it exists.',
+      'Four clearly-scoped roles (platform admin, school admin, teacher and student) each see only what they should.',
       'Secure token-based sign-in with silent session refresh keeps people logged in without weakening security.',
     ],
     facts: [
@@ -175,10 +200,10 @@ const FEATURES: Feature[] = [
     eyebrow: 'Branding & appearance',
     title: 'It should feel like your school',
     intro:
-      'Make the platform yours — your logo, your colours — carried across every account.',
+      'Make the platform yours with your own logo and colours, carried across every account.',
     points: [
       'Upload your logo and choose your brand colour; the whole app re-themes from that single colour.',
-      'Your branding shows up for admins, staff and students alike — they see your school, not our software.',
+      'Your branding shows up for admins, staff and students alike, so they see your school, not our software.',
       'Readable text colours are derived automatically, so even a pale brand colour still looks right.',
     ],
     facts: [
@@ -197,7 +222,7 @@ const FEATURES: Feature[] = [
       'Schools join by invitation, so every account is real and vetted from day one.',
     points: [
       'Request access with a short form, get reviewed, and receive a secure setup link by email.',
-      'Setup links are single-use, expiring and revocable — and the raw link is never stored anywhere.',
+      'Setup links are single-use, time-limited and revocable, and the raw link is never stored anywhere.',
       'Accepting the link creates your school and your admin account together, and signs you straight in.',
     ],
     facts: [
@@ -218,6 +243,7 @@ const MATRIX: { capability: string; admin: Access; teacher: Access; student: Acc
   { capability: 'Set up sessions, terms & subjects', admin: true, teacher: false, student: false },
   { capability: 'Build & grade exams', admin: true, teacher: true, student: false },
   { capability: 'Sit exams & see own results', admin: false, teacher: false, student: true },
+  { capability: 'Host & play live quizzes', admin: true, teacher: true, student: 'Join & play' },
   { capability: 'Import data', admin: true, teacher: false, student: false },
   { capability: 'Export data', admin: true, teacher: true, student: false },
   { capability: 'Branding & appearance', admin: true, teacher: false, student: false },
@@ -264,7 +290,7 @@ export default function Features({
             className="mx-auto mt-5 max-w-2xl animate-fade-up text-lg leading-relaxed text-gray-400"
             style={{ animationDelay: '160ms' }}
           >
-            Four focused modules — students, staff, testing and data — built on a
+            Focused modules for students, staff, testing and data, all built on a
             secure, multi-tenant foundation. Here’s exactly what each one gives you.
           </p>
         </div>
@@ -303,8 +329,8 @@ export default function Features({
               Everyone sees exactly what they should
             </h2>
             <p className="mt-4 text-lg text-gray-400">
-              Access isn’t a suggestion in the interface — it’s enforced on the
-              server for every request.
+              Access isn’t just a suggestion in the interface. It’s enforced on the
+              server for every single request.
             </p>
           </Reveal>
 

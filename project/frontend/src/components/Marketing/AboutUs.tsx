@@ -16,7 +16,7 @@ const VALUES = [
   {
     icon: Lock,
     title: 'Trust by design',
-    body: 'Schools hold sensitive data about children. Isolation and security are not features we add later — they are the foundation everything else sits on.',
+    body: 'Schools hold sensitive data about children. For us, isolation and security aren’t features we bolt on later. They’re the foundation everything else is built on.',
   },
   {
     icon: Compass,
@@ -77,8 +77,8 @@ export default function AboutUs({
             style={{ animationDelay: '160ms' }}
           >
             {PRODUCT_NAME} exists so that running a school takes less paperwork and
-            more teaching. We build the operating system underneath it all — quietly
-            reliable, so educators can get on with educating.
+            more teaching. We build the quietly reliable system underneath it all,
+            so educators can get on with educating.
           </p>
         </div>
       </section>
@@ -93,13 +93,13 @@ export default function AboutUs({
             <p className="mt-5 text-lg leading-relaxed text-gray-400">
               Too many schools still run on paper registers, scattered
               spreadsheets and exam scripts marked late into the night. The cost
-              is not just time — it is attention that should belong to students.
+              isn’t just time. It’s attention that should belong to students.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-gray-400">
               We set out to replace that with one calm, dependable platform: a
               single place to enrol students, take attendance, manage staff and
-              run computer-based tests — secure by default and simple enough to
-              use on the first day.
+              run computer-based tests. It’s secure by default and simple enough
+              to use on your very first day.
             </p>
           </Reveal>
 
@@ -131,10 +131,10 @@ export default function AboutUs({
                 each other.
               </p>
               <p>
-                Neither fit the schools around us. So we started narrow and deep —
-                nailing attendance, checkouts, staff and testing — and made sure
-                each school’s data stayed completely its own. No noisy extras, no
-                data leaking between tenants, no month-long onboarding.
+                Neither really fit the schools around us. So we started narrow and
+                deep, getting attendance, checkouts, staff and testing right, and
+                made sure each school’s data stayed completely its own. No noisy
+                extras, no data leaking between schools, no month-long onboarding.
               </p>
               <p>
                 That focus is still our compass. Every new capability has to earn
@@ -152,8 +152,8 @@ export default function AboutUs({
             What we stand for
           </h2>
           <p className="mt-4 text-lg text-gray-400">
-            Four principles that decide what we build — and what we deliberately
-            leave out.
+            Four principles that guide what we build, and what we happily leave
+            out.
           </p>
         </Reveal>
 

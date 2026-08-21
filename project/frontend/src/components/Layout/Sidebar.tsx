@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Download,
   FileSpreadsheet,
+  Gamepad2,
   GraduationCap,
   FileText,
   Home,
@@ -88,6 +89,12 @@ export const menuItems: {
     label: 'AI Questions',
     icon: Sparkles,
     roles: ['school_admin', 'teacher'],
+  },
+  {
+    id: 'live',
+    label: 'Live Quiz',
+    icon: Gamepad2,
+    roles: ['school_admin', 'teacher', 'student'],
   },
   {
     id: 'results',
