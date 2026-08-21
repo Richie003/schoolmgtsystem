@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/staff/', include('staff.urls')),
     path('api/cbt/', include('cbt.urls')),
     path('api/cbt-gen/', include('cbtgen.urls')),
+    path('api/results/', include('results.urls')),
     path('api/dataio/', include('dataio.urls')),
     path('api/onboarding/', include('onboarding.urls')),
 ]

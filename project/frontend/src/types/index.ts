@@ -448,6 +448,75 @@ export interface ExportPreview {
 // ---------------------------------------------------------------------------
 // Onboarding (school signup)
 // ---------------------------------------------------------------------------
+// --- Results & report cards ---
+export type SheetStatus = 'open' | 'submitted' | 'cumulated' | 'published';
+
+export interface GradingComponent {
+  id: number; name: string; max_score: number; order: number; is_exam: boolean;
+}
+export interface GradeBand {
+  id: number; min_score: number; max_score: number; grade: string; remark: string; order: number;
+}
+export interface GradingScheme {
+  id: number; name: string; is_default: boolean; is_active: boolean; total_max: number;
+  components: GradingComponent[]; bands: GradeBand[];
+}
+
+export interface ResultSheet {
+  id: number; classroom: number; classroom_name: string; session: number; session_name: string;
+  term: number; term_name: string; scheme: number; scheme_name: string; subjects: number[];
+  subject_names: string[]; status: SheetStatus; next_term_begins: string | null;
+  report_count: number; student_count: number;
+  submitted_at: string | null; cumulated_at: string | null; reviewed_at: string | null;
+  published_at: string | null; created_at: string;
+}
+
+export interface GridCell { scores: Record<string, number>; teacher_remark: string }
+export interface ResultGrid {
+  sheet: ResultSheet;
+  components: GradingComponent[];
+  subjects: { id: number; name: string }[];
+  students: { id: number; name: string; admission_number: string }[];
+  rows: Record<string, Record<string, GridCell>>;
+}
+
+export interface ReportRow {
+  id: number; student: number; student_name: string; admission_number: string;
+  subjects_count: number; total: string | number; average: string | number; grade: string;
+  position: number | null; class_size: number; class_teacher_remark: string;
+  published_at: string | null;
+}
+
+export interface ReportSubject {
+  subject: string; subject_id: number; scores: Record<string, number>;
+  total: number; percent: number; grade: string; grade_remark: string;
+  position: number | null; teacher_remark: string;
+}
+export interface ReportCardData {
+  id: number; status: SheetStatus; published_at: string | null;
+  student: { id: number; name: string; admission_number: string; photo: string | null; gender: string };
+  classroom: string; term: string; session: string; next_term_begins: string | null;
+  scheme: { name: string; components: GradingComponent[] };
+  subjects: ReportSubject[];
+  summary: {
+    subjects_count: number; total: number; average: number; grade: string;
+    grade_remark: string; position: number | null; class_size: number;
+  };
+  remarks: { class_teacher: string; principal: string };
+  traits: Record<string, string>;
+  attendance: { present: number; absent: number; total: number };
+  template: {
+    header_text: string; show_attendance: boolean; show_positions: boolean;
+    show_remarks: boolean; show_traits: boolean; traits: string[];
+  };
+  school: { name: string; logo: string | null; brand_color: string; address: string };
+}
+
+export interface ReportTemplateSettings {
+  header_text: string; show_attendance: boolean; show_positions: boolean;
+  show_remarks: boolean; show_traits: boolean; traits: string[]; is_premium: boolean;
+}
+
 export type SignupRequestStatus = 'pending' | 'approved' | 'rejected';
 export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
 

@@ -28,6 +28,7 @@ const Noticeboard = lazy(() => import('./components/Staff/Noticeboard'));
 const AcademicsManager = lazy(() => import('./components/Academics/AcademicsManager'));
 const CBTManager = lazy(() => import('./components/CBT/CBTManager'));
 const QuestionGenerator = lazy(() => import('./components/CBT/QuestionGenerator'));
+const ResultsManager = lazy(() => import('./components/Results/ResultsManager'));
 const ImportManager = lazy(() => import('./components/DataIO/ImportManager'));
 const ExportManager = lazy(() => import('./components/DataIO/ExportManager'));
 const AppearanceSettings = lazy(() => import('./components/Settings/AppearanceSettings'));
@@ -89,6 +90,8 @@ function MainApp() {
         return <CBTManager />;
       case 'aiquestions':
         return <QuestionGenerator />;
+      case 'results':
+        return <ResultsManager />;
       case 'import':
         return <ImportManager />;
       case 'export':

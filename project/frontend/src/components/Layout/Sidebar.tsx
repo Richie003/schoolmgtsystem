@@ -6,6 +6,7 @@ import {
   Download,
   FileSpreadsheet,
   GraduationCap,
+  FileText,
   Home,
   LogOut,
   LogOutIcon,
@@ -87,6 +88,12 @@ export const menuItems: {
     label: 'AI Questions',
     icon: Sparkles,
     roles: ['school_admin', 'teacher'],
+  },
+  {
+    id: 'results',
+    label: 'Report Cards',
+    icon: FileText,
+    roles: ['school_admin', 'teacher', 'student'],
   },
   {
     id: 'academics',
