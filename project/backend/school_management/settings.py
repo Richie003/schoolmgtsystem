@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'dataio',
     'onboarding',
     'results',
+    'live',
 ]
 
 MIDDLEWARE = [
