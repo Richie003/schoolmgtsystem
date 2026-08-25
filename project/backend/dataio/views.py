@@ -22,12 +22,29 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import Role
 from core.csv_utils import decode_upload, read_rows, write_csv
 from core.permissions import IsAuthenticatedAndActiveSchool, IsSchoolAdmin, IsStaffMember
 from core.viewsets import TenantScopedMixin
 from dataio.exporters import get_exporter
 from dataio.importers import get_importer, template_columns
 from dataio.models import ImportJob
+
+# Results and CBT records carry per-student marks, so their export is limited to
+# administrators; the other datasets stay open to teachers.
+ADMIN_ONLY_EXPORTS = {'cbt', 'results', 'report_cards'}
+
+
+def _export_forbidden(request, kind):
+    """None if allowed, else a 403 Response for a sensitive export by a teacher."""
+    if kind in ADMIN_ONLY_EXPORTS and request.user.role not in (
+        Role.SCHOOL_ADMIN, Role.SUPER_ADMIN,
+    ):
+        return Response(
+            {'detail': 'Only administrators can export results and CBT records.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
 from dataio.serializers import (
     ExportRequestSerializer,
     ImportJobSerializer,
@@ -249,12 +266,14 @@ class ExportPreviewView(APIView):
     def get(self, request):
         serializer = ExportRequestSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
+        kind = serializer.validated_data['kind']
+        forbidden = _export_forbidden(request, kind)
+        if forbidden:
+            return forbidden
 
         try:
             exporter = get_exporter(
-                serializer.validated_data['kind'],
-                school=request.user.school,
-                filters=serializer.to_filters(),
+                kind, school=request.user.school, filters=serializer.to_filters(),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -277,12 +296,14 @@ class ExportDownloadView(APIView):
     def get(self, request):
         serializer = ExportRequestSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
+        kind = serializer.validated_data['kind']
+        forbidden = _export_forbidden(request, kind)
+        if forbidden:
+            return forbidden
 
         try:
             exporter = get_exporter(
-                serializer.validated_data['kind'],
-                school=request.user.school,
-                filters=serializer.to_filters(),
+                kind, school=request.user.school, filters=serializer.to_filters(),
             )
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)

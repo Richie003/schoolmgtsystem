@@ -148,6 +148,7 @@ function NewGameModal({
   const [title, setTitle] = useState('');
   const [seconds, setSeconds] = useState(20);
   const [speedBonus, setSpeedBonus] = useState(true);
+  const [scoreboardEvery, setScoreboardEvery] = useState(3);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -169,6 +170,7 @@ function NewGameModal({
         title: title.trim() || undefined,
         seconds_per_question: seconds,
         speed_bonus: speedBonus,
+        scoreboard_every: scoreboardEvery,
       });
       onCreated(data.id);
     } catch (e) {
@@ -221,6 +223,20 @@ function NewGameModal({
               {[10, 15, 20, 30, 45, 60].map((n) => (
                 <option key={n} value={n}>{n} seconds</option>
               ))}
+            </select>
+          </Field>
+
+          <Field label="Scoreboard interlude">
+            <select
+              className={inputClass}
+              value={scoreboardEvery}
+              onChange={(e) => setScoreboardEvery(Number(e.target.value))}
+            >
+              <option value={1}>After every question</option>
+              <option value={2}>After every 2 questions</option>
+              <option value={3}>After every 3 questions</option>
+              <option value={4}>After every 4 questions</option>
+              <option value={5}>After every 5 questions</option>
             </select>
           </Field>
 

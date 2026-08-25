@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { LiveStanding } from '../../types';
 
 /*
  * NlightR Live — a "broadcast" visual language.
@@ -186,6 +187,151 @@ export function LiveDot({ label = 'LIVE' }: { label?: string }) {
 /** A hairline rule. */
 export function Rule({ className = '' }: { className?: string }) {
   return <div className={`h-px w-full bg-white/10 ${className}`} />;
+}
+
+/**
+ * A one-shot confetti burst over the whole viewport. Self-contained canvas — no
+ * library — that rains for a few seconds then fades and stops. Honours reduced
+ * motion (renders nothing). The colour set is stable across re-renders (keyed on
+ * the accent string) so polling doesn't keep restarting the burst.
+ */
+export function Confetti({ accent, count = 150 }: { accent: string; count?: number }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const colors = [accent, '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#ffffff'];
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = (canvas.width = window.innerWidth * dpr);
+    const H = (canvas.height = window.innerHeight * dpr);
+
+    const parts = Array.from({ length: count }, () => ({
+      x: Math.random() * W,
+      y: -Math.random() * H * 0.4,
+      w: (6 + Math.random() * 6) * dpr,
+      h: (9 + Math.random() * 7) * dpr,
+      vx: (Math.random() - 0.5) * 1.6 * dpr,
+      vy: (2.4 + Math.random() * 3.2) * dpr,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.24,
+      color: colors[(Math.random() * colors.length) | 0],
+    }));
+
+    let raf = 0;
+    const start = performance.now();
+    const DURATION = 3200;
+    const tick = (t: number) => {
+      const elapsed = t - start;
+      ctx.clearRect(0, 0, W, H);
+      for (const p of parts) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03 * dpr; // gravity
+        p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, 1 - elapsed / DURATION);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      if (elapsed < DURATION) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [accent, count]);
+
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-40 h-full w-full"
+    />
+  );
+}
+
+const ROW_REM = 3.5; // must match the row height (h-14) below, for the slide math.
+
+/**
+ * The scoreboard, mid-reshuffle. Rows are rendered in their NEW order but start
+ * translated to where they sat in the PREVIOUS ranking, then slide into place —
+ * so the board visibly rearranges itself highest-to-lowest. A movement caret and
+ * a "+points" flash tell each player what just happened.
+ */
+export function Standings({
+  rows,
+  accent,
+  highlight,
+}: {
+  rows: LiveStanding[];
+  accent: string;
+  highlight?: string;
+}) {
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    // Two frames: paint at the old positions once, then release to the new ones.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setSettled(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
+
+  return (
+    <div className="mx-auto w-full max-w-xl">
+      {rows.map((r) => {
+        const delta = r.prev_rank - r.rank; // + => moved up
+        const mine = highlight != null && r.nickname === highlight;
+        return (
+          <div
+            key={r.nickname}
+            className="flex h-14 items-center gap-3 border-b border-white/10 px-2"
+            style={{
+              transform: settled ? 'translateY(0)' : `translateY(calc(${delta} * ${ROW_REM}rem))`,
+              transition: 'transform 720ms cubic-bezier(.2,.7,.2,1)',
+              background: mine ? hexToRgba(accent, 0.14) : undefined,
+            }}
+          >
+            <span
+              className="w-7 shrink-0 font-mono text-xl font-black tabular-nums"
+              style={mine ? { color: accent } : undefined}
+            >
+              {r.rank}
+            </span>
+            <span
+              className="w-8 shrink-0 font-mono text-xs"
+              style={{ color: delta > 0 ? accent : 'rgba(255,255,255,.35)' }}
+            >
+              {delta !== 0 ? `${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}` : ''}
+            </span>
+            <span className="flex-1 truncate text-lg font-bold">
+              {r.nickname}
+              {mine && <span className="ml-2 text-xs font-normal text-white/50">you</span>}
+            </span>
+            {r.gained > 0 && (
+              <span
+                className="rounded-full px-2 py-0.5 font-mono text-xs font-bold"
+                style={{ background: hexToRgba(accent, 0.18), color: accent }}
+              >
+                +{r.gained}
+              </span>
+            )}
+            <span className="w-16 shrink-0 text-right font-mono tabular-nums">{r.score}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /** The thin draining progress line pinned to the top of the stage. */

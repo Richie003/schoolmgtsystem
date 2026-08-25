@@ -134,7 +134,9 @@ class JoinTests(LiveFixture):
 class GameplayTests(LiveFixture):
     def setUp(self):
         super().setUp()
-        self.pin = self.host_session(seconds_per_question=20)['pin']
+        # scoreboard_every=1 → an interlude after every question, so these tests
+        # exercise the full question → reveal → scoreboard → question cycle.
+        self.pin = self.host_session(seconds_per_question=20, scoreboard_every=1)['pin']
         self.sid = GameSession.objects.get(pin=self.pin).id
         self.token = self.join(self.pin, 'Ada').data['token']
 
@@ -155,6 +157,12 @@ class GameplayTests(LiveFixture):
     def answer_right(self, token=None):
         return self.answer(self.pin, token or self.token, [self.right_for(self.live_qid(token))])
 
+    def reveal(self):
+        return self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/reveal/')
+
+    def advance(self):
+        return self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/next/')
+
     def test_question_never_leaks_correct_answer(self):
         self.start()
         resp = self.state(self.pin, self.token)
@@ -163,12 +171,30 @@ class GameplayTests(LiveFixture):
         for choice in resp.data['question']['choices']:
             self.assertNotIn('is_correct', choice)
 
+    def test_score_stays_hidden_until_reveal(self):
+        # The bug: answering correctly bumped the player's own score mid-question,
+        # spoiling the result before the host revealed it.
+        self.start()
+        qid = self.live_qid()
+        self.answer(self.pin, self.token, [self.right_for(qid)])
+
+        during = self.state(self.pin, self.token).data
+        self.assertEqual(during['status'], 'question')
+        self.assertEqual(during['you']['score'], 0)      # not yet applied
+        self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, 0)
+
+        self.reveal()
+        after = self.state(self.pin, self.token).data
+        self.assertEqual(after['status'], 'reveal')
+        self.assertGreater(after['you']['score'], 0)     # applied at reveal
+
     def test_correct_answer_scores_wrong_scores_zero(self):
         self.start()
         qid = self.live_qid()
         self.answer(self.pin, self.token, [self.right_for(qid)])       # Ada right
         bob = self.join(self.pin, 'Bob').data['token']
         self.answer(self.pin, bob, [self.wrong_for(qid)])              # Bob wrong
+        self.reveal()   # scores commit here, not before
 
         ada = GamePlayer.objects.get(nickname='Ada')
         bob_p = GamePlayer.objects.get(nickname='Bob')
@@ -184,7 +210,6 @@ class GameplayTests(LiveFixture):
 
         # Ada answers immediately (started_at is 'now').
         self.answer(self.pin, self.token, [self.right_for(qid)])
-        fast = GamePlayer.objects.get(nickname='Ada').score
 
         # Rewind the clock so Bob's identical answer looks much slower.
         GameSession.objects.filter(pk=self.sid).update(
@@ -192,23 +217,89 @@ class GameplayTests(LiveFixture):
                 seconds=session.seconds_per_question - 1))
         bob = self.join(self.pin, 'Bob').data['token']
         self.answer(self.pin, bob, [self.right_for(qid)])
-        slow = GamePlayer.objects.get(nickname='Bob').score
+        self.reveal()   # commit both, then compare
 
+        fast = GamePlayer.objects.get(nickname='Ada').score
+        slow = GamePlayer.objects.get(nickname='Bob').score
         self.assertGreater(fast, slow)
 
     def test_streak_adds_bonus(self):
         self.start()
         self.answer_right()
+        self.reveal()    # commit Q1
         first = GamePlayer.objects.get(nickname='Ada').score
 
-        self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/reveal/')
-        self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/next/')
+        self.advance()   # reveal -> scoreboard interlude
+        self.advance()   # scoreboard -> next question
 
         self.answer_right()
+        self.reveal()    # commit Q2
         ada = GamePlayer.objects.get(nickname='Ada')
         self.assertEqual(ada.streak, 2)
         # Two correct in a row earns the base twice plus a streak bonus.
         self.assertGreater(ada.score - first, first)
+
+    def test_scoreboard_interlude_between_questions(self):
+        self.start()
+        self.answer_right()
+        self.reveal()
+
+        resp = self.advance()   # reveal -> scoreboard
+        self.assertEqual(resp.data['status'], 'scoreboard')
+        standings = resp.data['standings']
+        self.assertGreaterEqual(len(standings), 1)
+        row = standings[0]
+        for key in ('rank', 'prev_rank', 'nickname', 'score', 'gained'):
+            self.assertIn(key, row)
+        self.assertEqual(row['nickname'], 'Ada')
+        self.assertGreater(row['gained'], 0)
+
+        # The player sees the interlude too, with their own gain.
+        player = self.state(self.pin, self.token).data
+        self.assertEqual(player['status'], 'scoreboard')
+        self.assertIn('standings', player)
+        self.assertGreater(player['you']['gained'], 0)
+
+        # Host advances the interlude to the next question.
+        resp = self.advance()   # scoreboard -> question
+        self.assertEqual(resp.data['status'], 'question')
+        self.assertEqual(resp.data['question_index'], 1)
+
+    def test_interlude_gated_to_every_n(self):
+        # A longer game (4 questions) that shows the scoreboard every 2 questions.
+        self.make_question('3 x 3?', correct='C')
+        self.make_question('Largest planet?', correct='D')
+        data = self.host_session(seconds_per_question=20, scoreboard_every=2)
+        self.pin = data['pin']
+        self.sid = GameSession.objects.get(pin=self.pin).id
+        self.token = self.join(self.pin, 'Ada').data['token']
+
+        self.start()
+        # Question 1 is not a multiple of 2 → straight to the next question.
+        self.answer_right()
+        rev = self.reveal()
+        self.assertFalse(rev.data['next_is_scoreboard'])
+        resp = self.advance()
+        self.assertEqual(resp.data['status'], 'question')
+        self.assertEqual(resp.data['question_index'], 1)
+
+        # Question 2 completes a batch of 2 → the interlude fires.
+        self.answer_right()
+        rev = self.reveal()
+        self.assertTrue(rev.data['next_is_scoreboard'])
+        resp = self.advance()
+        self.assertEqual(resp.data['status'], 'scoreboard')
+
+    def test_last_question_skips_interlude(self):
+        self.start()
+        self.answer_right()
+        self.reveal()
+        self.advance()          # -> scoreboard (after Q1 of 2)
+        self.advance()          # -> Q2 (the last)
+        self.answer_right()
+        self.reveal()
+        resp = self.advance()   # last question reveal -> straight to podium
+        self.assertEqual(resp.data['status'], 'ended')
 
     def test_reveal_exposes_answer_and_result(self):
         self.start()
@@ -241,11 +332,12 @@ class GameplayTests(LiveFixture):
     def test_full_game_reaches_podium(self):
         self.start()
         self.answer_right()
-        self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/reveal/')
-        self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/next/')
+        self.reveal()
+        self.advance()   # reveal -> scoreboard
+        self.advance()   # scoreboard -> question 2
         self.answer_right()
-        self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/reveal/')
-        resp = self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/next/')
+        self.reveal()
+        resp = self.advance()   # last question -> ended
 
         self.assertEqual(resp.data['status'], 'ended')
         podium = self.state(self.pin, self.token).data['podium']

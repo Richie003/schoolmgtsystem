@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from dataio.exporters import EXPORTERS
 from dataio.models import ImportJob
 
 
@@ -45,11 +46,14 @@ class ImportUploadSerializer(serializers.Serializer):
 
 
 class ExportRequestSerializer(serializers.Serializer):
-    kind = serializers.ChoiceField(choices=ImportJob.Kind.choices)
+    # Export kinds are a superset of import kinds (some datasets are export-only,
+    # e.g. CBT records and results), so validate against the exporter registry.
+    kind = serializers.ChoiceField(choices=[(k, k) for k in EXPORTERS])
     classroom = serializers.IntegerField(required=False, allow_null=True)
     term = serializers.IntegerField(required=False, allow_null=True)
     session = serializers.IntegerField(required=False, allow_null=True)
     subject = serializers.IntegerField(required=False, allow_null=True)
+    exam = serializers.IntegerField(required=False, allow_null=True)
     bank = serializers.IntegerField(required=False, allow_null=True)
     status = serializers.CharField(required=False, allow_blank=True)
     employment_status = serializers.CharField(required=False, allow_blank=True)

@@ -17,9 +17,15 @@ class GameSessionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'bank', 'bank_name', 'subject_name', 'pin', 'status',
             'current_index', 'question_count', 'player_count',
-            'seconds_per_question', 'points_base', 'speed_bonus', 'created_at',
+            'seconds_per_question', 'points_base', 'speed_bonus',
+            'scoreboard_every', 'created_at',
         ]
         read_only_fields = ['pin', 'status', 'current_index', 'created_at']
+
+    def validate_scoreboard_every(self, value):
+        if not 1 <= value <= 20:
+            raise serializers.ValidationError('Choose between 1 and 20 questions.')
+        return value
 
     def get_bank_name(self, obj):
         return str(obj.bank)

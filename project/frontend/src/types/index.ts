@@ -416,6 +416,9 @@ export type ImportKind =
   | 'attendance'
   | 'checkouts';
 
+/** Export supports a few datasets that have no importer (CBT records, results). */
+export type ExportKind = ImportKind | 'cbt' | 'results' | 'report_cards';
+
 export interface ImportJob {
   id: number;
   kind: ImportKind;
@@ -518,13 +521,13 @@ export interface ReportTemplateSettings {
 }
 
 // --- Live quiz (Kahoot-style) ---
-export type LiveStatus = 'lobby' | 'question' | 'reveal' | 'ended';
+export type LiveStatus = 'lobby' | 'question' | 'reveal' | 'scoreboard' | 'ended';
 
 export interface LiveSession {
   id: number; title: string; bank: number; bank_name: string; subject_name: string;
   pin: string; status: LiveStatus; current_index: number; question_count: number;
   player_count: number; seconds_per_question: number; points_base: number;
-  speed_bonus: boolean; created_at: string;
+  speed_bonus: boolean; scoreboard_every: number; created_at: string;
 }
 
 export interface LiveChoice { id: number; text: string }
@@ -536,6 +539,12 @@ export interface LiveQuestion {
 export interface LiveScoreRow { rank: number; nickname: string; score: number }
 export interface LivePlayerRow { nickname: string; score: number; streak: number }
 
+/** A standings row during the scoreboard interlude, with enough to animate the
+ *  reshuffle from the previous ranking. */
+export interface LiveStanding {
+  rank: number; prev_rank: number; nickname: string; score: number; gained: number;
+}
+
 /** The host's presenter poll. */
 export interface LiveHostState {
   id: number; status: LiveStatus; pin: string; title: string; accent: string;
@@ -544,6 +553,8 @@ export interface LiveHostState {
   question?: LiveQuestion; answered_count?: number;
   deadline?: string; server_time?: string;
   correct_choice_ids?: number[]; distribution?: Record<string, number>;
+  next_is_scoreboard?: boolean;
+  standings?: LiveStanding[];
   scoreboard?: LiveScoreRow[]; podium?: LiveScoreRow[];
 }
 
@@ -551,12 +562,13 @@ export interface LiveHostState {
 export interface LivePlayerState {
   status: LiveStatus; pin: string; title: string; accent: string;
   question_index: number; question_count: number;
-  you: { nickname: string; score: number; streak: number; rank: number };
+  you: { nickname: string; score: number; streak: number; rank: number; gained?: number };
   players_count?: number;
   deadline?: string; server_time?: string; seconds_per_question?: number;
   question?: LiveQuestion; answered?: boolean; your_choices?: number[];
   correct_choice_ids?: number[];
   result?: { answered: boolean; is_correct: boolean; points: number; your_choices: number[] };
+  standings?: LiveStanding[];
   scoreboard?: LiveScoreRow[]; podium?: LiveScoreRow[];
 }
 

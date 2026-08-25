@@ -3,7 +3,7 @@ import type { LivePlayerState } from '../../types';
 import { errorMessage, liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
 import {
-  Kicker, KeySquare, ProgressLine, Rule, Stage,
+  Confetti, Kicker, KeySquare, ProgressLine, Rule, Stage, Standings,
   hexToRgba, useDeadline, useInterval,
 } from './shared';
 
@@ -255,6 +255,9 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
           )}
 
           {st.status === 'reveal' && <Reveal state={st} accent={accent} />}
+          {st.status === 'scoreboard' && (
+            <ScoreboardPlayer key={st.question_index} state={st} accent={accent} />
+          )}
           {st.status === 'ended' && <Ended state={st} accent={accent} onLeave={onLeave} />}
         </div>
       </div>
@@ -355,6 +358,27 @@ function Question({
   );
 }
 
+function ScoreboardPlayer({ state, accent }: { state: LivePlayerState; accent: string }) {
+  return (
+    <div className="flex flex-1 flex-col py-6">
+      <Confetti accent={accent} />
+      <div className="text-center">
+        <Kicker>Scoreboard</Kicker>
+        <p className="mt-2 text-3xl font-black tracking-tight" style={{ color: accent }}>
+          {ordinal(state.you.rank)} place
+        </p>
+        {state.you.gained ? (
+          <p className="mt-1 font-mono text-sm text-white/70">+{state.you.gained} this round</p>
+        ) : null}
+      </div>
+      <div className="mt-6 flex-1">
+        <Standings rows={state.standings ?? []} accent={accent} highlight={state.you.nickname} />
+      </div>
+      <p className="mt-6 text-center text-sm text-white/45">Waiting for the host to continue…</p>
+    </div>
+  );
+}
+
 function Reveal({ state, accent }: { state: LivePlayerState; accent: string }) {
   const r = state.result;
   const correct = r?.is_correct;
@@ -401,6 +425,7 @@ function Ended({
 
   return (
     <div className="flex flex-1 flex-col justify-center py-8">
+      <Confetti accent={accent} count={won ? 220 : 130} />
       <Kicker>{won ? 'Champion' : 'Final'}</Kicker>
       <p className="mt-2 text-5xl font-black tracking-tight" style={won ? { color: accent } : undefined}>
         {won ? 'You won.' : ordinal(me.rank)}

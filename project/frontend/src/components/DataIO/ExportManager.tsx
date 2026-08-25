@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Eye } from 'lucide-react';
-import { academicAPI, dataioAPI, errorMessage } from '../../services/api';
-import type { Classroom, ExportPreview, ImportKind, Term } from '../../types';
+import { academicAPI, cbtAPI, dataioAPI, errorMessage } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import type {
+  AcademicSession, Classroom, ExportKind, ExportPreview, Subject, Term,
+} from '../../types';
 import {
   Alert,
   Button,
@@ -13,25 +16,41 @@ import {
   inputClass,
 } from '../UI/Primitives';
 
-const KINDS: { value: ImportKind; label: string }[] = [
+const ALL_KINDS: { value: ExportKind; label: string; adminOnly?: boolean }[] = [
   { value: 'students', label: 'Students' },
   { value: 'staff', label: 'Staff' },
   { value: 'questions', label: 'Questions' },
   { value: 'attendance', label: 'Attendance' },
   { value: 'checkouts', label: 'Checkouts' },
+  { value: 'cbt', label: 'CBT results', adminOnly: true },
+  { value: 'results', label: 'Result sheets', adminOnly: true },
+  { value: 'report_cards', label: 'Report cards', adminOnly: true },
 ];
 
-const DATE_FILTERED: ImportKind[] = ['attendance', 'checkouts'];
+const DATE_FILTERED: ExportKind[] = ['attendance', 'checkouts'];
+const RESULT_KINDS: ExportKind[] = ['cbt', 'results', 'report_cards'];
+const SUBJECT_KINDS: ExportKind[] = ['cbt', 'results']; // report cards have no subject dimension
 
 export default function ExportManager() {
-  const [kind, setKind] = useState<ImportKind>('students');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'school_admin' || user?.role === 'super_admin';
+  const kinds = useMemo(
+    () => ALL_KINDS.filter((k) => !k.adminOnly || isAdmin),
+    [isAdmin],
+  );
+
+  const [kind, setKind] = useState<ExportKind>('students');
   const [classroom, setClassroom] = useState('');
+  const [session, setSession] = useState('');
   const [term, setTerm] = useState('');
+  const [subject, setSubject] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [sessions, setSessions] = useState<AcademicSession[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [preview, setPreview] = useState<ExportPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -42,18 +61,32 @@ export default function ExportManager() {
       .then(({ data }) => setClassrooms(data.results)).catch(() => undefined);
     academicAPI.terms({ page_size: 100 })
       .then(({ data }) => setTerms(data.results)).catch(() => undefined);
+    academicAPI.sessions({ page_size: 100 })
+      .then(({ data }) => setSessions(data.results)).catch(() => undefined);
+    cbtAPI.subjects({ page_size: 200 })
+      .then(({ data }) => setSubjects(data.results)).catch(() => undefined);
   }, []);
+
+  // Which filters apply to the current dataset.
+  const isResult = RESULT_KINDS.includes(kind);
+  const isDated = DATE_FILTERED.includes(kind);
+  const showsClassroom = kind === 'students' || isDated || isResult;
+  const showsSession = isResult;
+  const showsTerm = isDated || isResult;
+  const showsSubject = SUBJECT_KINDS.includes(kind);
 
   const filters = useCallback(() => {
     const result: Record<string, unknown> = {};
-    if (classroom) result.classroom = classroom;
-    if (DATE_FILTERED.includes(kind)) {
-      if (term) result.term = term;
+    if (showsClassroom && classroom) result.classroom = classroom;
+    if (showsSession && session) result.session = session;
+    if (showsTerm && term) result.term = term;
+    if (showsSubject && subject) result.subject = subject;
+    if (isDated) {
       if (dateFrom) result.date_from = dateFrom;
       if (dateTo) result.date_to = dateTo;
     }
     return result;
-  }, [kind, classroom, term, dateFrom, dateTo]);
+  }, [showsClassroom, classroom, showsSession, session, showsTerm, term, showsSubject, subject, isDated, dateFrom, dateTo]);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -83,8 +116,6 @@ export default function ExportManager() {
     }
   };
 
-  const showsClassroom = kind === 'students' || DATE_FILTERED.includes(kind);
-
   return (
     <div>
       <PageHeader
@@ -102,9 +133,9 @@ export default function ExportManager() {
             <select
               className={inputClass}
               value={kind}
-              onChange={(e) => setKind(e.target.value as ImportKind)}
+              onChange={(e) => setKind(e.target.value as ExportKind)}
             >
-              {KINDS.map((k) => (
+              {kinds.map((k) => (
                 <option key={k.value} value={k.value}>{k.label}</option>
               ))}
             </select>
@@ -125,20 +156,53 @@ export default function ExportManager() {
             </Field>
           )}
 
-          {DATE_FILTERED.includes(kind) && (
+          {showsSession && (
+            <Field label="Session">
+              <select
+                className={inputClass}
+                value={session}
+                onChange={(e) => setSession(e.target.value)}
+              >
+                <option value="">All sessions</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {showsTerm && (
+            <Field label="Term">
+              <select
+                className={inputClass}
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+              >
+                <option value="">All terms</option>
+                {terms.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} — {t.session_name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {showsSubject && (
+            <Field label="Subject">
+              <select
+                className={inputClass}
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              >
+                <option value="">All subjects</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {isDated && (
             <>
-              <Field label="Term">
-                <select
-                  className={inputClass}
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                >
-                  <option value="">All terms</option>
-                  {terms.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} — {t.session_name}</option>
-                  ))}
-                </select>
-              </Field>
               <Field label="From">
                 <input
                   type="date"
@@ -158,6 +222,13 @@ export default function ExportManager() {
             </>
           )}
         </div>
+
+        {isResult && (
+          <p className="mt-3 text-xs text-gray-500">
+            Result exports include finalised (cumulated or published) sheets only, and
+            can span every term — filter to narrow to one class, session or term.
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="secondary" onClick={loadPreview} loading={loading}>

@@ -40,6 +40,7 @@ class GameSession(TenantModel):
         LOBBY = 'lobby', 'Lobby'
         QUESTION = 'question', 'Question live'
         REVEAL = 'reveal', 'Revealing answer'
+        SCOREBOARD = 'scoreboard', 'Scoreboard interlude'
         ENDED = 'ended', 'Ended'
 
     host = models.ForeignKey(
@@ -68,6 +69,10 @@ class GameSession(TenantModel):
     points_base = models.PositiveIntegerField(default=1000)
     speed_bonus = models.BooleanField(
         default=True, help_text='Award more points for faster correct answers.'
+    )
+    scoreboard_every = models.PositiveSmallIntegerField(
+        default=3,
+        help_text='Show the scoreboard interlude after every N questions (1 = after each).',
     )
 
     ended_at = models.DateTimeField(null=True, blank=True)

@@ -10,6 +10,7 @@ import type {
   Exam,
   ExamAttempt,
   ExportPreview,
+  ExportKind,
   ImportKind,
   ImportPreview,
   Notice,
@@ -499,7 +500,7 @@ export const liveAPI = {
     api.get<Paginated<LiveSession>>('/live/sessions/', { params }),
   createSession: (data: {
     bank: number; title?: string; seconds_per_question?: number;
-    points_base?: number; speed_bonus?: boolean;
+    points_base?: number; speed_bonus?: boolean; scoreboard_every?: number;
   }) => api.post<LiveSession>('/live/sessions/', data),
   removeSession: (id: number) => api.delete(`/live/sessions/${id}/`),
   hostState: (id: number) => api.get<LiveHostState>(`/live/sessions/${id}/state/`),
@@ -544,12 +545,12 @@ export const dataioAPI = {
   downloadTemplate: (kind: ImportKind) =>
     downloadCsv('/dataio/imports/template/', { kind }, `${kind}-import-template.csv`),
 
-  exportPreview: (kind: ImportKind, filters: Record<string, unknown> = {}) =>
+  exportPreview: (kind: ExportKind, filters: Record<string, unknown> = {}) =>
     api.get<ExportPreview>('/dataio/exports/preview/', {
       params: { kind, ...filters },
     }),
 
-  download: (kind: ImportKind, filters: Record<string, unknown> = {}) =>
+  download: (kind: ExportKind, filters: Record<string, unknown> = {}) =>
     downloadCsv('/dataio/exports/download/', { kind, ...filters }, `${kind}.csv`),
 };
 
