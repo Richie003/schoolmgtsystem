@@ -62,23 +62,74 @@ def start_game(session):
 def reveal(session):
     if session.status != Status.QUESTION:
         raise ValidationError('No live question to reveal.')
+    # Fold this question's answers into scores only now — not when players
+    # answered — so a player's score never moves before the host reveals.
+    apply_answers(session)
     session.status = Status.REVEAL
     session.save(update_fields=['status', 'updated_at'])
     return session
 
 
+def apply_answers(session):
+    """Commit the current question's answers to player scores and streaks.
+
+    Runs once, at reveal. Each answering player gains their answer's points and
+    either extends their streak (correct) or loses it (wrong); players who
+    didn't answer are left untouched.
+    """
+    answers = GameAnswer.objects.filter(
+        session=session, question_index=session.current_index
+    ).select_related('player')
+    for answer in answers:
+        player = answer.player
+        player.score += answer.points
+        player.streak = player.streak + 1 if answer.is_correct else 0
+        player.save(update_fields=['score', 'streak'])
+
+
+def is_last_question(session):
+    return session.current_index + 1 >= session.question_count
+
+
+def interlude_due(session):
+    """Whether the scoreboard interlude should play after the current question.
+
+    Gated to every Nth question (``scoreboard_every``) and never on the last one
+    — the podium is the final scoreboard.
+    """
+    if is_last_question(session):
+        return False
+    every = max(1, session.scoreboard_every)
+    return (session.current_index + 1) % every == 0
+
+
+def _go_to_next_question(session):
+    session.current_index += 1
+    session.status = Status.QUESTION
+    session.question_started_at = timezone.now()
+    session.save(update_fields=[
+        'current_index', 'status', 'question_started_at', 'updated_at',
+    ])
+
+
 def next_question(session):
-    if session.status != Status.REVEAL:
-        raise ValidationError('Reveal the current question first.')
-    if session.current_index + 1 < session.question_count:
-        session.current_index += 1
-        session.status = Status.QUESTION
-        session.question_started_at = timezone.now()
-        session.save(update_fields=[
-            'current_index', 'status', 'question_started_at', 'updated_at',
-        ])
+    """The host's forward button.
+
+    Reveal → (scoreboard interlude, on milestone questions) → next question. The
+    final question skips the interlude and goes straight to the podium.
+    """
+    if session.status == Status.REVEAL:
+        if is_last_question(session):
+            end_game(session)
+        elif interlude_due(session):
+            session.status = Status.SCOREBOARD
+            session.save(update_fields=['status', 'updated_at'])
+        else:
+            _go_to_next_question(session)
+    elif session.status == Status.SCOREBOARD:
+        _go_to_next_question(session)
     else:
-        end_game(session)
+        raise ValidationError('There is nothing to advance to right now.')
     return session
 
 
@@ -137,7 +188,10 @@ def record_answer(session, player, choice_ids):
     is_correct = bool(chosen) and chosen == correct_ids
 
     response_ms = max(0, min(elapsed_ms, limit_ms))
-    points, streak = _score(session, is_correct, response_ms, player.streak)
+    # Points (including the streak bonus off the player's current streak) are
+    # computed and stored now, but only applied to the player at reveal — so the
+    # score they see stays put until the host shows results. See apply_answers.
+    points, _ = _score(session, is_correct, response_ms, player.streak)
 
     GameAnswer.objects.create(
         player=player,
@@ -148,9 +202,6 @@ def record_answer(session, player, choice_ids):
         response_ms=response_ms,
         points=points,
     )
-    player.score += points
-    player.streak = streak
-    player.save(update_fields=['score', 'streak'])
     return {'received': True, 'response_ms': response_ms}
 
 
@@ -203,6 +254,72 @@ def scoreboard(session, limit=5):
     ]
 
 
+def batch_range(session):
+    """The span of questions this interlude summarises: everything since the
+    previous scoreboard (or the start), up to the current question."""
+    every = max(1, session.scoreboard_every)
+    lo = max(0, session.current_index - every + 1)
+    return lo, session.current_index
+
+
+def batch_gain(session, player):
+    """Points a single player earned across the current interlude's batch."""
+    lo, hi = batch_range(session)
+    return sum(
+        GameAnswer.objects.filter(
+            player=player, question_index__gte=lo, question_index__lte=hi
+        ).values_list('points', flat=True)
+    )
+
+
+def standings_delta(session, limit=None):
+    """Standings at the interlude, annotated with each player's rank *before*
+    this batch of questions and the points they gained across it.
+
+    That's everything the client needs to animate the reshuffle: start each row
+    at ``prev_rank``, slide it to ``rank``, and flash the ``gained`` points. The
+    "previous" ranking is reconstructed by subtracting the batch's points, so no
+    ranking snapshot has to be stored between questions.
+    """
+    players = list(session.players.all())
+    lo, hi = batch_range(session)
+    gained_map = {}
+    for a in GameAnswer.objects.filter(
+        session=session, question_index__gte=lo, question_index__lte=hi
+    ):
+        gained_map[a.player_id] = gained_map.get(a.player_id, 0) + a.points
+    rows = [
+        {
+            'p': p,
+            'nickname': p.nickname,
+            'score': p.score,
+            'gained': gained_map.get(p.id, 0),
+            'prev_score': p.score - gained_map.get(p.id, 0),
+        }
+        for p in players
+    ]
+
+    for i, r in enumerate(
+        sorted(rows, key=lambda r: (-r['prev_score'], r['p'].joined_at))
+    ):
+        r['prev_rank'] = i + 1
+    ranked = sorted(rows, key=lambda r: (-r['score'], r['p'].joined_at))
+    for i, r in enumerate(ranked):
+        r['rank'] = i + 1
+
+    ordered = ranked if limit is None else ranked[:limit]
+    return [
+        {
+            'rank': r['rank'],
+            'prev_rank': r['prev_rank'],
+            'nickname': r['nickname'],
+            'score': r['score'],
+            'gained': r['gained'],
+        }
+        for r in ordered
+    ]
+
+
 def _rank_of(session, player):
     higher = session.players.filter(score__gt=player.score).count()
     return higher + 1
@@ -241,7 +358,11 @@ def host_state(session, request=None):
         question = _get_question(session)
         data['correct_choice_ids'] = sorted(question.correct_choice_ids())
         data['distribution'] = _distribution(session, question)
-        data['scoreboard'] = scoreboard(session, limit=8)
+        # Lets the host's button read "Scoreboard" vs "Next" before they tap.
+        data['next_is_scoreboard'] = interlude_due(session)
+
+    if session.status == Status.SCOREBOARD:
+        data['standings'] = standings_delta(session, limit=10)
 
     if session.status == Status.ENDED:
         data['podium'] = scoreboard(session, limit=5)
@@ -299,8 +420,12 @@ def player_state(session, player, request=None):
                 'points': answered.points if answered else 0,
                 'your_choices': answered.choice_ids if answered else [],
             },
-            scoreboard=scoreboard(session, limit=5),
         )
+        return data
+
+    if session.status == Status.SCOREBOARD:
+        data['you']['gained'] = batch_gain(session, player)
+        data['standings'] = standings_delta(session, limit=8)
         return data
 
     # ENDED
