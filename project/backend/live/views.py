@@ -12,6 +12,7 @@ Player side (guests, no auth — PIN + token):
     /api/live/play/{pin}/answer/        submit an answer (POST, {token, choice_ids})
 """
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -42,12 +43,22 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
         bank = serializer.validated_data['bank']
         if bank.school_id != user.school_id:
             raise PermissionDenied('That question bank belongs to another school.')
-        serializer.save(
-            school_id=user.school_id,
-            host=user,
-            pin=services.unique_pin(),
-            title=serializer.validated_data.get('title') or str(bank),
-        )
+        # The database constraint is the reservation; the availability check in
+        # unique_pin() is only a fast path.  Retry if another host claims the
+        # same candidate in the interval before this row is inserted.
+        for _ in range(20):
+            try:
+                with transaction.atomic():
+                    serializer.save(
+                        school_id=user.school_id,
+                        host=user,
+                        pin=services.unique_pin(),
+                        title=serializer.validated_data.get('title') or str(bank),
+                    )
+                return
+            except IntegrityError:
+                continue
+        raise ValidationError('Could not allocate a game PIN, please try again.')
 
     @action(detail=True, methods=['get'])
     def state(self, request, pk=None):
@@ -117,9 +128,15 @@ class PlayerJoinView(APIView):
         if session.players.filter(nickname__iexact=nickname).exists():
             raise ValidationError({'nickname': 'That nickname is taken — try another.'})
 
-        player = GamePlayer.objects.create(
-            session=session, nickname=nickname, token=generate_token()
-        )
+        try:
+            with transaction.atomic():
+                player = GamePlayer.objects.create(
+                    session=session, nickname=nickname, token=generate_token()
+                )
+        except IntegrityError:
+            # A simultaneous join can pass the read above; the database is the
+            # final authority and must still yield the normal student message.
+            raise ValidationError({'nickname': 'That nickname is taken — try another.'})
         return Response(
             {
                 'token': player.token,
