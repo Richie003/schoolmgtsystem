@@ -93,7 +93,7 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reveal(self, request, pk=None):
         session = self.get_object()
-        services.reveal(session)
+        session = services.reveal(session)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
