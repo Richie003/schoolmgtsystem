@@ -29,6 +29,21 @@ from .models import GamePlayer, GameSession, generate_token
 from .serializers import GameSessionSerializer
 
 
+def _is_constraint_error(error, constraint_name, sqlite_fragment):
+    """Identify our expected uniqueness conflict without hiding other DB errors.
+
+    PostgreSQL exposes the constraint name through the driver's diagnostic
+    payload.  SQLite (used by the test suite) reports the indexed columns in
+    its error text instead, so support both forms.
+    """
+    cause = error.__cause__
+    diagnostic = getattr(cause, 'diag', None)
+    if getattr(diagnostic, 'constraint_name', None):
+        return diagnostic.constraint_name == constraint_name
+    message = str(error)
+    return constraint_name in message or sqlite_fragment in message
+
+
 class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     """The host's control surface. Staff only, tenant-scoped like everything
     else — a teacher can only host from their own school's banks."""
@@ -56,8 +71,12 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
                         title=serializer.validated_data.get('title') or str(bank),
                     )
                 return
-            except IntegrityError:
-                continue
+            except IntegrityError as error:
+                if _is_constraint_error(
+                    error, 'unique_live_game_pin', 'live_gamesession.pin'
+                ):
+                    continue
+                raise
         raise ValidationError('Could not allocate a game PIN, please try again.')
 
     @action(detail=True, methods=['get'])
@@ -133,7 +152,11 @@ class PlayerJoinView(APIView):
                 player = GamePlayer.objects.create(
                     session=session, nickname=nickname, token=generate_token()
                 )
-        except IntegrityError:
+        except IntegrityError as error:
+            if not _is_constraint_error(
+                error, 'unique_nickname_per_game', 'live_gameplayer.session_id'
+            ):
+                raise
             # A simultaneous join can pass the read above; the database is the
             # final authority and must still yield the normal student message.
             raise ValidationError({'nickname': 'That nickname is taken — try another.'})
