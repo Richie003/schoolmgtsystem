@@ -153,7 +153,19 @@ class JoinTests(LiveFixture):
 
     def test_join_race_returns_the_duplicate_nickname_message(self):
         pin = self.host_session()['pin']
-        with patch('live.views.GamePlayer.objects.create', side_effect=IntegrityError):
+        original_create = GamePlayer.objects.create
+
+        def create_after_a_concurrent_join(**kwargs):
+            original_create(
+                session=kwargs['session'],
+                nickname=kwargs['nickname'],
+                token='a' * 32,
+            )
+            return original_create(**kwargs)
+
+        with patch(
+            'live.views.GamePlayer.objects.create', side_effect=create_after_a_concurrent_join
+        ):
             resp = self.join(pin, 'Ada')
 
         self.assertEqual(resp.status_code, 400)
