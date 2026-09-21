@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 from accounts.models import Role, User
 from cbt.models import Choice, Question, QuestionBank, Subject
 from core.models import School
+from live.contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN
 from live.models import GamePlayer, GameSession
 
 
@@ -128,7 +129,7 @@ class JoinTests(LiveFixture):
         self.join(pin, 'Ada')
         resp = self.join(pin, 'ada')  # case-insensitive clash
         self.assertEqual(resp.status_code, 400)
-        self.assertEqual(resp.data['nickname'], 'That nickname is taken — try another.')
+        self.assertEqual(resp.data['nickname'], DUPLICATE_NICKNAME)
         self.assertEqual(GamePlayer.objects.count(), 1)
 
     def test_blank_nickname_rejected(self):
@@ -139,7 +140,7 @@ class JoinTests(LiveFixture):
     def test_bad_pin_is_404(self):
         resp = self.join('000000', 'Ada')
         self.assertEqual(resp.status_code, 404)
-        self.assertEqual(resp.data['detail'], 'No live game with that PIN.')
+        self.assertEqual(resp.data['detail'], NO_LIVE_GAME_WITH_PIN)
 
     def test_ended_game_pin_is_refused_with_the_same_message(self):
         hosted = self.host_session()
@@ -149,7 +150,7 @@ class JoinTests(LiveFixture):
         resp = self.join(hosted['pin'], 'Ada')
 
         self.assertEqual(resp.status_code, 404)
-        self.assertEqual(resp.data['detail'], 'No live game with that PIN.')
+        self.assertEqual(resp.data['detail'], NO_LIVE_GAME_WITH_PIN)
 
     def test_join_race_returns_the_duplicate_nickname_message(self):
         pin = self.host_session()['pin']
@@ -169,7 +170,7 @@ class JoinTests(LiveFixture):
             resp = self.join(pin, 'Ada')
 
         self.assertEqual(resp.status_code, 400)
-        self.assertEqual(resp.data['nickname'], 'That nickname is taken — try another.')
+        self.assertEqual(resp.data['nickname'], DUPLICATE_NICKNAME)
 
 
 class LivePinConstraintTests(LiveFixture):
