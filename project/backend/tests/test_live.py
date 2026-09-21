@@ -261,6 +261,42 @@ class GameplayTests(LiveFixture):
         self.assertEqual(after['status'], 'reveal')
         self.assertGreater(after['you']['score'], 0)     # applied at reveal
 
+    def test_replaying_reveal_cannot_apply_scores_twice(self):
+        self.start()
+        self.answer_right()
+
+        first = self.reveal()
+        score_after_first_reveal = GamePlayer.objects.get(nickname='Ada').score
+        second = self.reveal()
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, score_after_first_reveal)
+
+    def test_failed_reveal_rolls_back_all_scores_and_the_transition(self):
+        self.start()
+        self.answer_right()
+        bob = self.join(self.pin, 'Bob').data['token']
+        self.answer_right(bob)
+        original_save = GamePlayer.save
+        save_count = 0
+
+        def fail_on_second_save(player, *args, **kwargs):
+            nonlocal save_count
+            save_count += 1
+            if save_count == 2:
+                raise RuntimeError('database write interrupted')
+            return original_save(player, *args, **kwargs)
+
+        with patch('live.services.GamePlayer.save', new=fail_on_second_save):
+            with self.assertRaises(RuntimeError):
+                self.reveal()
+
+        session = GameSession.objects.get(pk=self.sid)
+        self.assertEqual(session.status, GameSession.Status.QUESTION)
+        self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, 0)
+        self.assertEqual(GamePlayer.objects.get(nickname='Bob').score, 0)
+
     def test_correct_answer_scores_wrong_scores_zero(self):
         self.start()
         qid = self.live_qid()
