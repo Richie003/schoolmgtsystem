@@ -25,6 +25,7 @@ from core.permissions import IsAuthenticatedAndActiveSchool, IsStaffMember
 from core.viewsets import TenantScopedMixin
 
 from . import services
+from .contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN, PIN_ALLOCATION_FAILED
 from .models import GamePlayer, GameSession, generate_token
 from .serializers import GameSessionSerializer
 
@@ -77,7 +78,7 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
                 ):
                     continue
                 raise
-        raise ValidationError('Could not allocate a game PIN, please try again.')
+        raise ValidationError(PIN_ALLOCATION_FAILED)
 
     @action(detail=True, methods=['get'])
     def state(self, request, pk=None):
@@ -139,13 +140,13 @@ class PlayerJoinView(APIView):
             .first()
         )
         if session is None:
-            raise NotFound('No live game with that PIN.')
+            raise NotFound(NO_LIVE_GAME_WITH_PIN)
 
         nickname = (request.data.get('nickname') or '').strip()
         if not nickname or len(nickname) > 20:
             raise ValidationError({'nickname': 'Pick a nickname of 1–20 characters.'})
         if session.players.filter(nickname__iexact=nickname).exists():
-            raise ValidationError({'nickname': 'That nickname is taken — try another.'})
+            raise ValidationError({'nickname': DUPLICATE_NICKNAME})
 
         try:
             with transaction.atomic():
@@ -159,7 +160,7 @@ class PlayerJoinView(APIView):
                 raise
             # A simultaneous join can pass the read above; the database is the
             # final authority and must still yield the normal student message.
-            raise ValidationError({'nickname': 'That nickname is taken — try another.'})
+            raise ValidationError({'nickname': DUPLICATE_NICKNAME})
         return Response(
             {
                 'token': player.token,
