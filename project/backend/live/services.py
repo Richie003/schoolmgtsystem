@@ -8,6 +8,7 @@ enters :attr:`GameSession.Status.REVEAL`; that is the whole point of the mode.
 
 import random
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
@@ -60,14 +61,22 @@ def start_game(session):
 
 
 def reveal(session):
-    if session.status != Status.QUESTION:
-        raise ValidationError('No live question to reveal.')
-    # Fold this question's answers into scores only now — not when players
-    # answered — so a player's score never moves before the host reveals.
-    apply_answers(session)
-    session.status = Status.REVEAL
-    session.save(update_fields=['status', 'updated_at'])
-    return session
+    """Commit a question's results exactly once and enter reveal.
+
+    The status check, score application, and transition share one locked
+    transaction so a double-click (or a retry after a failing score update)
+    cannot credit a player twice.
+    """
+    with transaction.atomic():
+        session = GameSession.objects.select_for_update().get(pk=session.pk)
+        if session.status != Status.QUESTION:
+            raise ValidationError('No live question to reveal.')
+        # Fold this question's answers into scores only now — not when players
+        # answered — so a player's score never moves before the host reveals.
+        apply_answers(session)
+        session.status = Status.REVEAL
+        session.save(update_fields=['status', 'updated_at'])
+        return session
 
 
 def apply_answers(session):
@@ -77,11 +86,17 @@ def apply_answers(session):
     either extends their streak (correct) or loses it (wrong); players who
     didn't answer are left untouched.
     """
-    answers = GameAnswer.objects.filter(
+    answers = list(GameAnswer.objects.filter(
         session=session, question_index=session.current_index
-    ).select_related('player')
+    ))
+    players = {
+        player.id: player
+        for player in GamePlayer.objects.select_for_update().filter(
+            id__in=[answer.player_id for answer in answers]
+        )
+    }
     for answer in answers:
-        player = answer.player
+        player = players[answer.player_id]
         player.score += answer.points
         player.streak = player.streak + 1 if answer.is_correct else 0
         player.save(update_fields=['score', 'streak'])
