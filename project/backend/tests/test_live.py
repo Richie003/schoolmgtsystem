@@ -18,8 +18,9 @@ from live.contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN
 from live.models import GamePlayer, GameSession
 
 
-class LiveFixture(TestCase):
+class LiveFixtureMixin:
     def setUp(self):
+        super().setUp()
         self.school = School.objects.create(name='Green', code='GRN')
         self.other = School.objects.create(name='Blue', code='BLU')
 
@@ -76,6 +77,10 @@ class LiveFixture(TestCase):
         return self.guest.post(
             f'/api/live/play/{pin}/answer/',
             {'token': token, 'choice_ids': choice_ids}, format='json')
+
+
+class LiveFixture(LiveFixtureMixin, TestCase):
+    pass
 
 
 class HostingTests(LiveFixture):
@@ -272,6 +277,16 @@ class GameplayTests(LiveFixture):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 400)
         self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, score_after_first_reveal)
+
+    def test_ending_during_a_question_keeps_answers_already_accepted(self):
+        self.start()
+        self.answer_right()
+
+        response = self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/end/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'ended')
+        self.assertGreater(GamePlayer.objects.get(nickname='Ada').score, 0)
 
     def test_failed_reveal_rolls_back_all_scores_and_the_transition(self):
         self.start()
