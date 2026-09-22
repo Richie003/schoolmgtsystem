@@ -99,13 +99,13 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def next(self, request, pk=None):
         session = self.get_object()
-        services.next_question(session)
+        session = services.next_question(session)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
         session = self.get_object()
-        services.end_game(session)
+        session = services.end_game(session)
         return Response(services.host_state(session, request))
 
 
