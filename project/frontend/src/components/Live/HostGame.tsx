@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import type { LiveHostState } from '../../types';
 import { liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
 import {
-  Kicker, KeySquare, LiveDot, ProgressLine, Rule, Stage,
+  Confetti, Kicker, KeySquare, LiveDot, ProgressLine, Rule, Stage, Standings,
   hexToRgba, useDeadline, useInterval,
 } from './shared';
+import { useLiveMusic } from './music';
+
+const MUSIC_KEY = 'live.music.muted';
 
 /**
  * The host's presenter screen — built for a shared display. A broadcast board:
@@ -21,6 +25,30 @@ export default function HostGame({
 }) {
   const [st, setSt] = useState<LiveHostState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(() => {
+    try {
+      return localStorage.getItem(MUSIC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  // Music lives only on the host screen (the projector). Beds follow the phase.
+  const music = useLiveMusic(musicMuted);
+  useEffect(() => {
+    music.setPhase(st?.status ?? null);
+  }, [music, st?.status]);
+
+  const toggleMusic = () =>
+    setMusicMuted((m) => {
+      const next = !m;
+      try {
+        localStorage.setItem(MUSIC_KEY, next ? '1' : '0');
+      } catch {
+        /* private mode — fall back to in-memory */
+      }
+      return next;
+    });
 
   const poll = useCallback(async () => {
     try {
@@ -42,6 +70,7 @@ export default function HostGame({
   const seconds = ms === null ? null : Math.ceil(ms / 1000);
 
   const act = async (fn: () => Promise<{ data: LiveHostState }>) => {
+    music.unlock(); // this click is a user gesture — safe to start audio
     setBusy(true);
     try {
       const { data } = await fn();
@@ -82,6 +111,14 @@ export default function HostGame({
             )}
             {(st.status === 'question' || st.status === 'reveal') && <LiveDot />}
             <button
+              onClick={toggleMusic}
+              className="text-white/40 transition hover:text-white"
+              aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
+              title={musicMuted ? 'Unmute music' : 'Mute music'}
+            >
+              {musicMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            <button
               onClick={() => act(() => liveAPI.end(sessionId)).then(onExit)}
               className="font-mono text-lg text-white/40 transition hover:text-white"
               aria-label="End game"
@@ -103,6 +140,15 @@ export default function HostGame({
               seconds={seconds}
               busy={busy}
               onReveal={() => act(() => liveAPI.reveal(sessionId))}
+              onNext={() => act(() => liveAPI.next(sessionId))}
+            />
+          )}
+          {st.status === 'scoreboard' && (
+            <ScoreboardStage
+              key={st.question_index}
+              st={st}
+              accent={accent}
+              busy={busy}
               onNext={() => act(() => liveAPI.next(sessionId))}
             />
           )}
@@ -297,7 +343,7 @@ function Board({
         </span>
         {revealing ? (
           <CommandButton onClick={onNext} disabled={busy} accent={accent}>
-            {last ? 'Final results ▸' : 'Next ▸'}
+            {last ? 'Final results ▸' : st.next_is_scoreboard ? 'Scoreboard ▸' : 'Next ▸'}
           </CommandButton>
         ) : (
           <CommandButton onClick={onReveal} disabled={busy} accent={accent} variant="ghost">
@@ -306,24 +352,41 @@ function Board({
         )}
       </div>
 
-      {revealing && st.scoreboard && st.scoreboard.length > 0 && (
-        <div className="mt-8">
-          <Kicker>Standings</Kicker>
-          <div className="mt-3 grid gap-x-8 gap-y-1 sm:grid-cols-2">
-            {st.scoreboard.map((row) => (
-              <div key={row.rank} className="flex items-center gap-3 py-1.5">
-                <span className="w-6 font-mono text-sm text-white/35 tabular-nums">
-                  {String(row.rank).padStart(2, '0')}
-                </span>
-                <span className="flex-1 truncate font-semibold">{row.nickname}</span>
-                <span className="font-mono tabular-nums" style={{ color: accent }}>
-                  {row.score}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+    </div>
+  );
+}
+
+function ScoreboardStage({
+  st,
+  accent,
+  busy,
+  onNext,
+}: {
+  st: LiveHostState;
+  accent: string;
+  busy: boolean;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <Confetti accent={accent} />
+      <div className="mb-6">
+        <Kicker>After question {st.question_index + 1}</Kicker>
+        <h2 className="mt-1 text-4xl font-black tracking-tight sm:text-5xl">Scoreboard</h2>
+      </div>
+
+      <div className="flex flex-1 items-center">
+        <Standings rows={st.standings ?? []} accent={accent} />
+      </div>
+
+      <div className="mt-6 flex items-center justify-between">
+        <span className="font-mono text-sm text-white/45 tabular-nums">
+          Question {st.question_index + 2} of {st.question_count} up next
+        </span>
+        <CommandButton onClick={onNext} disabled={busy} accent={accent}>
+          Next question ▸
+        </CommandButton>
+      </div>
     </div>
   );
 }
@@ -332,6 +395,7 @@ function Final({ st, accent, onExit }: { st: LiveHostState; accent: string; onEx
   const podium = st.podium ?? [];
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center">
+      <Confetti accent={accent} count={220} />
       <Kicker>Final standings</Kicker>
       <h2 className="mb-8 mt-2 text-5xl font-black tracking-tight">Results</h2>
 
