@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import type { LivePlayerState } from '../../types';
 import { errorMessage, liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
 import {
-  Kicker, KeySquare, ProgressLine, Rule, Stage,
+  Confetti, Kicker, KeySquare, ProgressLine, Rule, Stage, Standings,
   hexToRgba, useDeadline, useInterval,
 } from './shared';
+import { useLiveMusic } from './music';
 
 interface Joined {
   pin: string;
@@ -14,6 +16,7 @@ interface Joined {
 }
 
 const STORAGE_KEY = 'live.player';
+const MUSIC_KEY = 'live.player.music.muted';
 const MISS = '#e0533d';
 
 /**
@@ -146,6 +149,31 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
   const [submitting, setSubmitting] = useState(false);
   const [gone, setGone] = useState(false);
   const lastIndex = useRef<number>(-1);
+  const [musicMuted, setMusicMuted] = useState(() => {
+    try {
+      return localStorage.getItem(MUSIC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const music = useLiveMusic(musicMuted);
+
+  useEffect(() => {
+    music.setPhase(st?.status ?? null, st?.result, 'player');
+  }, [music, st?.status, st?.result]);
+
+  const toggleMusic = () => {
+    music.unlock();
+    setMusicMuted((muted) => {
+      const next = !muted;
+      try {
+        localStorage.setItem(MUSIC_KEY, next ? '1' : '0');
+      } catch {
+        /* private mode — fall back to in-memory */
+      }
+      return next;
+    });
+  };
 
   const poll = useCallback(async () => {
     try {
@@ -228,6 +256,14 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
               </span>
             )}
             <span className="font-mono text-lg tabular-nums">{you.score}</span>
+            <button
+              onClick={toggleMusic}
+              className="text-white/40 transition hover:text-white"
+              aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
+              title={musicMuted ? 'Unmute music' : 'Mute music'}
+            >
+              {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
           </span>
         </div>
         <Rule className="mt-4" />
@@ -255,6 +291,9 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
           )}
 
           {st.status === 'reveal' && <Reveal state={st} accent={accent} />}
+          {st.status === 'scoreboard' && (
+            <ScoreboardPlayer key={st.question_index} state={st} accent={accent} />
+          )}
           {st.status === 'ended' && <Ended state={st} accent={accent} onLeave={onLeave} />}
         </div>
       </div>
@@ -355,6 +394,27 @@ function Question({
   );
 }
 
+function ScoreboardPlayer({ state, accent }: { state: LivePlayerState; accent: string }) {
+  return (
+    <div className="flex flex-1 flex-col py-6">
+      <Confetti accent={accent} />
+      <div className="text-center">
+        <Kicker>Scoreboard</Kicker>
+        <p className="mt-2 text-3xl font-black tracking-tight" style={{ color: accent }}>
+          {ordinal(state.you.rank)} place
+        </p>
+        {state.you.gained ? (
+          <p className="mt-1 font-mono text-sm text-white/70">+{state.you.gained} this round</p>
+        ) : null}
+      </div>
+      <div className="mt-6 flex-1">
+        <Standings rows={state.standings ?? []} accent={accent} highlight={state.you.nickname} />
+      </div>
+      <p className="mt-6 text-center text-sm text-white/45">Waiting for the host to continue…</p>
+    </div>
+  );
+}
+
 function Reveal({ state, accent }: { state: LivePlayerState; accent: string }) {
   const r = state.result;
   const correct = r?.is_correct;
@@ -401,6 +461,7 @@ function Ended({
 
   return (
     <div className="flex flex-1 flex-col justify-center py-8">
+      <Confetti accent={accent} count={won ? 220 : 130} />
       <Kicker>{won ? 'Champion' : 'Final'}</Kicker>
       <p className="mt-2 text-5xl font-black tracking-tight" style={won ? { color: accent } : undefined}>
         {won ? 'You won.' : ordinal(me.rank)}

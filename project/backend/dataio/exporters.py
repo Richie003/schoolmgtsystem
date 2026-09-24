@@ -8,9 +8,19 @@ The querysets here are always filtered by ``school`` at construction — an
 exporter cannot be pointed at another tenant's data.
 """
 
-from cbt.models import Question
+from cbt.models import ExamAttempt, Question
+from results.models import ClassResultSheet, StudentReport, SubjectResult
 from staff.models import Staff
 from students.models import AttendanceRecord, CheckoutRecord, Student
+
+# Result sheets are only exportable once their marks are finalised — never while
+# a class teacher is still entering scores.
+FINALISED = (ClassResultSheet.Status.CUMULATED, ClassResultSheet.Status.PUBLISHED)
+
+
+def _dt(value):
+    """Datetime → 'YYYY-MM-DD HH:MM', or '' when absent."""
+    return value.strftime('%Y-%m-%d %H:%M') if value else ''
 
 
 class BaseExporter:
@@ -222,12 +232,203 @@ class CheckoutExporter(BaseExporter):
         }
 
 
+class CbtAttemptExporter(BaseExporter):
+    """One row per completed CBT sitting. Session/term/subject come from the exam,
+    so a class's attempts across every term sit in one tidy file, sliced by the
+    class / session / term / subject / exam filters."""
+
+    kind = 'cbt'
+    filename = 'cbt-results.csv'
+    headers = (
+        'admission_number', 'student_name', 'classroom', 'session', 'term',
+        'subject', 'exam_title', 'attempt_number', 'status', 'score',
+        'total_marks', 'percentage', 'passed', 'started_at', 'submitted_at',
+    )
+
+    def get_queryset(self):
+        queryset = ExamAttempt.objects.filter(school=self.school).select_related(
+            'student', 'student__classroom', 'exam', 'exam__subject',
+            'exam__session', 'exam__term',
+        )
+        f = self.filters
+        if f.get('classroom'):
+            queryset = queryset.filter(student__classroom_id=f['classroom'])
+        if f.get('session'):
+            queryset = queryset.filter(exam__session_id=f['session'])
+        if f.get('term'):
+            queryset = queryset.filter(exam__term_id=f['term'])
+        if f.get('subject'):
+            queryset = queryset.filter(exam__subject_id=f['subject'])
+        if f.get('exam'):
+            queryset = queryset.filter(exam_id=f['exam'])
+        if f.get('status'):
+            queryset = queryset.filter(status=f['status'])
+        else:
+            # A "record" is a finished sitting, not an abandoned or live one.
+            queryset = queryset.filter(status__in=[
+                ExamAttempt.Status.SUBMITTED, ExamAttempt.Status.AUTO_SUBMITTED,
+            ])
+        return queryset.order_by(
+            'exam__title', 'student__last_name', 'student__first_name', 'attempt_number',
+        )
+
+    def serialise(self, obj):
+        exam = obj.exam
+        return {
+            'admission_number': obj.student.admission_number,
+            'student_name': obj.student.full_name,
+            'classroom': obj.student.classroom.full_name if obj.student.classroom else '',
+            'session': exam.session.name if exam.session_id else '',
+            'term': exam.term.name if exam.term_id else '',
+            'subject': exam.subject.name if exam.subject_id else '',
+            'exam_title': exam.title,
+            'attempt_number': obj.attempt_number,
+            'status': obj.status,
+            'score': obj.score,
+            'total_marks': obj.total_marks,
+            'percentage': obj.percentage,
+            'passed': 'yes' if obj.is_passed else 'no',
+            'started_at': _dt(obj.started_at),
+            'submitted_at': _dt(obj.submitted_at),
+        }
+
+
+class ResultBroadsheetExporter(BaseExporter):
+    """One row per student per subject, from finalised sheets — the marks ledger.
+
+    The component columns (e.g. 1st C.A. / 2nd C.A. / Exam) are taken from the
+    school's default grading scheme, so the header is stable while still matching
+    what schools actually grade on.
+    """
+
+    kind = 'results'
+    filename = 'result-sheets.csv'
+    LEAD = ('admission_number', 'student_name', 'classroom', 'session', 'term', 'subject')
+    TAIL = ('total', 'percentage', 'grade', 'position', 'teacher_remark')
+
+    def __init__(self, school, filters=None):
+        super().__init__(school, filters)
+        self.components = self._component_names()
+        # Instance-level headers: the views read exporter.headers (not the class).
+        self.headers = (*self.LEAD, *self.components, *self.TAIL)
+
+    def _component_names(self):
+        from results.services import ensure_default_scheme
+
+        scheme = ensure_default_scheme(self.school)
+        return [c.name for c in scheme.components.all()]
+
+    def get_queryset(self):
+        queryset = SubjectResult.objects.filter(
+            school=self.school, sheet__status__in=FINALISED,
+        ).select_related(
+            'student', 'student__classroom', 'subject',
+            'sheet', 'sheet__classroom', 'sheet__session', 'sheet__term', 'sheet__scheme',
+        ).prefetch_related('sheet__scheme__components')
+        f = self.filters
+        if f.get('classroom'):
+            queryset = queryset.filter(sheet__classroom_id=f['classroom'])
+        if f.get('session'):
+            queryset = queryset.filter(sheet__session_id=f['session'])
+        if f.get('term'):
+            queryset = queryset.filter(sheet__term_id=f['term'])
+        if f.get('subject'):
+            queryset = queryset.filter(subject_id=f['subject'])
+        return queryset.order_by(
+            'sheet__session__name', 'sheet__term__name', 'sheet__classroom__name',
+            'student__last_name', 'subject__name',
+        )
+
+    def serialise(self, obj):
+        sheet = obj.sheet
+        row = {
+            'admission_number': obj.student.admission_number,
+            'student_name': obj.student.full_name,
+            'classroom': sheet.classroom.full_name if sheet.classroom else '',
+            'session': sheet.session.name if sheet.session_id else '',
+            'term': sheet.term.name if sheet.term_id else '',
+            'subject': obj.subject.name,
+            'total': obj.total,
+            'percentage': obj.percent,
+            'grade': obj.grade,
+            'position': obj.position if obj.position is not None else '',
+            'teacher_remark': obj.teacher_remark,
+        }
+        # Map this row's stored scores (keyed by component id) onto the header's
+        # component-name columns. A sheet on a differently-named scheme simply
+        # leaves the default columns blank.
+        names = set(self.components)
+        id_to_name = {str(c.id): c.name for c in sheet.scheme.components.all()}
+        for column in self.components:
+            row[column] = ''
+        for cid, score in (obj.scores or {}).items():
+            name = id_to_name.get(str(cid))
+            if name in names:
+                row[name] = score
+        return row
+
+
+class ReportCardExporter(BaseExporter):
+    """One row per student — the cumulative report-card record from finalised
+    sheets (average, grade, position, remarks, attendance)."""
+
+    kind = 'report_cards'
+    filename = 'report-cards.csv'
+    headers = (
+        'admission_number', 'student_name', 'classroom', 'session', 'term',
+        'subjects', 'total', 'average', 'grade', 'position', 'class_size',
+        'attendance_present', 'attendance_absent', 'attendance_total',
+        'class_teacher_remark', 'principal_remark',
+    )
+
+    def get_queryset(self):
+        queryset = StudentReport.objects.filter(
+            school=self.school, sheet__status__in=FINALISED,
+        ).select_related(
+            'student', 'sheet', 'sheet__classroom', 'sheet__session', 'sheet__term',
+        )
+        f = self.filters
+        if f.get('classroom'):
+            queryset = queryset.filter(sheet__classroom_id=f['classroom'])
+        if f.get('session'):
+            queryset = queryset.filter(sheet__session_id=f['session'])
+        if f.get('term'):
+            queryset = queryset.filter(sheet__term_id=f['term'])
+        return queryset.order_by(
+            'sheet__session__name', 'sheet__term__name', 'sheet__classroom__name', 'position',
+        )
+
+    def serialise(self, obj):
+        sheet = obj.sheet
+        return {
+            'admission_number': obj.student.admission_number,
+            'student_name': obj.student.full_name,
+            'classroom': sheet.classroom.full_name if sheet.classroom else '',
+            'session': sheet.session.name if sheet.session_id else '',
+            'term': sheet.term.name if sheet.term_id else '',
+            'subjects': obj.subjects_count,
+            'total': obj.total,
+            'average': obj.average,
+            'grade': obj.grade,
+            'position': obj.position if obj.position is not None else '',
+            'class_size': obj.class_size,
+            'attendance_present': obj.attendance_present,
+            'attendance_absent': obj.attendance_absent,
+            'attendance_total': obj.attendance_total,
+            'class_teacher_remark': obj.class_teacher_remark,
+            'principal_remark': obj.principal_remark,
+        }
+
+
 EXPORTERS = {
     'students': StudentExporter,
     'staff': StaffExporter,
     'questions': QuestionExporter,
     'attendance': AttendanceExporter,
     'checkouts': CheckoutExporter,
+    'cbt': CbtAttemptExporter,
+    'results': ResultBroadsheetExporter,
+    'report_cards': ReportCardExporter,
 }
 
 

@@ -40,6 +40,7 @@ class GameSession(TenantModel):
         LOBBY = 'lobby', 'Lobby'
         QUESTION = 'question', 'Question live'
         REVEAL = 'reveal', 'Revealing answer'
+        SCOREBOARD = 'scoreboard', 'Scoreboard interlude'
         ENDED = 'ended', 'Ended'
 
     host = models.ForeignKey(
@@ -69,12 +70,23 @@ class GameSession(TenantModel):
     speed_bonus = models.BooleanField(
         default=True, help_text='Award more points for faster correct answers.'
     )
+    scoreboard_every = models.PositiveSmallIntegerField(
+        default=3,
+        help_text='Show the scoreboard interlude after every N questions (1 = after each).',
+    )
 
     ended_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['pin', 'status'])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['pin'],
+                condition=~models.Q(status='ended'),
+                name='unique_live_game_pin',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.title or self.bank} ({self.pin})'
@@ -123,7 +135,9 @@ class GamePlayer(models.Model):
         ordering = ['-score', 'joined_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['session', 'nickname'], name='unique_nickname_per_game'
+                models.functions.Lower('nickname'),
+                'session',
+                name='unique_nickname_per_game',
             ),
         ]
 

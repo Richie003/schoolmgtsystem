@@ -1,17 +1,20 @@
 """CSV import validation/preview/commit and export round-tripping."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import Role, User
-from cbt.models import Choice, Question, QuestionBank, Subject
+from cbt.models import Choice, Exam, ExamAttempt, Question, QuestionBank, Subject
 from core.models import School
 from dataio.exporters import get_exporter
 from dataio.importers import IMPORTERS, get_importer
 from dataio.models import ImportJob
+from results.models import ClassResultSheet, StudentReport, SubjectResult
+from results.services import ensure_default_scheme
 from students.models import AcademicSession, AttendanceRecord, Classroom, Student, Term
 
 
@@ -627,3 +630,117 @@ class ExportTests(ImportFixtureMixin, TestCase):
             '/api/dataio/exports/download/', {'kind': 'students'}
         )
         self.assertEqual(response.status_code, 403)
+
+
+class ResultsCbtExportTests(ImportFixtureMixin, TestCase):
+    """CBT records and results/report-card exports: shape, finalised-only, and
+    the admins-only gate."""
+
+    def setUp(self):
+        super().setUp()
+        self.subject = Subject.objects.create(school=self.school, name='Mathematics')
+        self.student = Student.objects.create(
+            school=self.school, admission_number='RES/001', first_name='Ada',
+            last_name='Bello', gender='female', classroom=self.classroom,
+        )
+
+        # --- CBT: a submitted attempt ---
+        bank = QuestionBank.objects.create(
+            school=self.school, subject=self.subject, name='Pool')
+        now = timezone.now()
+        exam = Exam.objects.create(
+            school=self.school, title='Mid-Term', subject=self.subject, bank=bank,
+            session=self.session, term=self.term, question_count=10,
+            duration_minutes=30, starts_at=now, ends_at=now + timedelta(hours=1))
+        ExamAttempt.objects.create(
+            school=self.school, exam=exam, student=self.student, attempt_number=1,
+            expires_at=now + timedelta(hours=1),
+            status=ExamAttempt.Status.SUBMITTED,
+            score=8, total_marks=10, percentage=80, is_passed=True, submitted_at=now)
+
+        # --- Results: a cumulated sheet with one subject result + report ---
+        self.scheme = ensure_default_scheme(self.school)
+        comps = {c.name: c for c in self.scheme.components.all()}
+        self.sheet = ClassResultSheet.objects.create(
+            school=self.school, classroom=self.classroom, session=self.session,
+            term=self.term, scheme=self.scheme,
+            status=ClassResultSheet.Status.CUMULATED)
+        self.sheet.subjects.add(self.subject)
+        SubjectResult.objects.create(
+            school=self.school, sheet=self.sheet, student=self.student,
+            subject=self.subject,
+            scores={str(comps['1st C.A.'].id): 12,
+                    str(comps['2nd C.A.'].id): 13,
+                    str(comps['Exam'].id): 55},
+            total=80, percent=80, grade='A1', position=1, teacher_remark='Great')
+        StudentReport.objects.create(
+            school=self.school, sheet=self.sheet, student=self.student,
+            subjects_count=1, total=80, average=80, grade='A1', position=1,
+            class_size=1, attendance_present=50, attendance_absent=2,
+            attendance_total=52, class_teacher_remark='Well done',
+            principal_remark='Keep it up')
+
+    def preview(self, user, kind, params=None):
+        return self.client_for(user).get(
+            '/api/dataio/exports/preview/', {'kind': kind, **(params or {})})
+
+    def test_cbt_records_export(self):
+        resp = self.preview(self.admin, 'cbt')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['total_rows'], 1)
+        row = resp.data['preview'][0]
+        self.assertEqual(row['exam_title'], 'Mid-Term')
+        self.assertEqual(row['subject'], 'Mathematics')
+        self.assertEqual(row['passed'], 'yes')
+        self.assertEqual(row['status'], 'submitted')
+
+    def test_results_broadsheet_has_component_columns(self):
+        resp = self.preview(self.admin, 'results')
+        self.assertEqual(resp.status_code, 200)
+        for col in ('1st C.A.', '2nd C.A.', 'Exam', 'total', 'grade', 'position'):
+            self.assertIn(col, resp.data['columns'])
+        row = resp.data['preview'][0]
+        self.assertEqual(row['subject'], 'Mathematics')
+        self.assertEqual(row['Exam'], 55)
+        self.assertEqual(row['grade'], 'A1')
+
+    def test_report_cards_summary_export(self):
+        resp = self.preview(self.admin, 'report_cards')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['total_rows'], 1)
+        row = resp.data['preview'][0]
+        self.assertEqual(row['class_teacher_remark'], 'Well done')
+        self.assertEqual(row['attendance_total'], 52)
+        self.assertIn('average', resp.data['columns'])
+
+    def test_open_sheets_are_not_exported(self):
+        # A second, still-open sheet must not leak into the results export.
+        term2 = Term.objects.create(
+            school=self.school, session=self.session, name='Second Term',
+            start_date=date(2026, 1, 10), end_date=date(2026, 4, 10))
+        open_sheet = ClassResultSheet.objects.create(
+            school=self.school, classroom=self.classroom, session=self.session,
+            term=term2, scheme=self.scheme, status=ClassResultSheet.Status.OPEN)
+        open_sheet.subjects.add(self.subject)
+        SubjectResult.objects.create(
+            school=self.school, sheet=open_sheet, student=self.student,
+            subject=self.subject, scores={}, total=0, percent=0)
+
+        resp = self.preview(self.admin, 'results')
+        self.assertEqual(resp.data['total_rows'], 1)  # only the cumulated sheet
+
+    def test_teachers_cannot_export_results_or_cbt(self):
+        for kind in ('cbt', 'results', 'report_cards'):
+            resp = self.preview(self.teacher, kind)
+            self.assertEqual(resp.status_code, 403, kind)
+        # …but a non-sensitive dataset is still fine for a teacher.
+        self.assertEqual(self.preview(self.teacher, 'students').status_code, 200)
+
+    def test_results_download_is_csv(self):
+        resp = self.client_for(self.admin).get(
+            '/api/dataio/exports/download/', {'kind': 'results'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'text/csv')
+        body = resp.content.decode('utf-8')
+        self.assertIn('RES/001', body)
+        self.assertIn('Exam', body)

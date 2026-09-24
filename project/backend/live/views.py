@@ -12,6 +12,7 @@ Player side (guests, no auth — PIN + token):
     /api/live/play/{pin}/answer/        submit an answer (POST, {token, choice_ids})
 """
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -24,8 +25,24 @@ from core.permissions import IsAuthenticatedAndActiveSchool, IsStaffMember
 from core.viewsets import TenantScopedMixin
 
 from . import services
+from .contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN, PIN_ALLOCATION_FAILED
 from .models import GamePlayer, GameSession, generate_token
 from .serializers import GameSessionSerializer
+
+
+def _is_constraint_error(error, constraint_name, sqlite_fragment):
+    """Identify our expected uniqueness conflict without hiding other DB errors.
+
+    PostgreSQL exposes the constraint name through the driver's diagnostic
+    payload.  SQLite (used by the test suite) reports the indexed columns in
+    its error text instead, so support both forms.
+    """
+    cause = error.__cause__
+    diagnostic = getattr(cause, 'diag', None)
+    if getattr(diagnostic, 'constraint_name', None):
+        return diagnostic.constraint_name == constraint_name
+    message = str(error)
+    return constraint_name in message or sqlite_fragment in message
 
 
 class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
@@ -42,12 +59,26 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
         bank = serializer.validated_data['bank']
         if bank.school_id != user.school_id:
             raise PermissionDenied('That question bank belongs to another school.')
-        serializer.save(
-            school_id=user.school_id,
-            host=user,
-            pin=services.unique_pin(),
-            title=serializer.validated_data.get('title') or str(bank),
-        )
+        # The database constraint is the reservation; the availability check in
+        # unique_pin() is only a fast path.  Retry if another host claims the
+        # same candidate in the interval before this row is inserted.
+        for _ in range(20):
+            try:
+                with transaction.atomic():
+                    serializer.save(
+                        school_id=user.school_id,
+                        host=user,
+                        pin=services.unique_pin(),
+                        title=serializer.validated_data.get('title') or str(bank),
+                    )
+                return
+            except IntegrityError as error:
+                if _is_constraint_error(
+                    error, 'unique_live_game_pin', 'live_gamesession.pin'
+                ):
+                    continue
+                raise
+        raise ValidationError(PIN_ALLOCATION_FAILED)
 
     @action(detail=True, methods=['get'])
     def state(self, request, pk=None):
@@ -62,19 +93,19 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reveal(self, request, pk=None):
         session = self.get_object()
-        services.reveal(session)
+        session = services.reveal(session)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def next(self, request, pk=None):
         session = self.get_object()
-        services.next_question(session)
+        session = services.next_question(session)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
         session = self.get_object()
-        services.end_game(session)
+        session = services.end_game(session)
         return Response(services.host_state(session, request))
 
 
@@ -109,17 +140,27 @@ class PlayerJoinView(APIView):
             .first()
         )
         if session is None:
-            raise NotFound('No live game with that PIN.')
+            raise NotFound(NO_LIVE_GAME_WITH_PIN)
 
         nickname = (request.data.get('nickname') or '').strip()
         if not nickname or len(nickname) > 20:
             raise ValidationError({'nickname': 'Pick a nickname of 1–20 characters.'})
         if session.players.filter(nickname__iexact=nickname).exists():
-            raise ValidationError({'nickname': 'That nickname is taken — try another.'})
+            raise ValidationError({'nickname': DUPLICATE_NICKNAME})
 
-        player = GamePlayer.objects.create(
-            session=session, nickname=nickname, token=generate_token()
-        )
+        try:
+            with transaction.atomic():
+                player = GamePlayer.objects.create(
+                    session=session, nickname=nickname, token=generate_token()
+                )
+        except IntegrityError as error:
+            if not _is_constraint_error(
+                error, 'unique_nickname_per_game', 'live_gameplayer.session_id'
+            ):
+                raise
+            # A simultaneous join can pass the read above; the database is the
+            # final authority and must still yield the normal student message.
+            raise ValidationError({'nickname': DUPLICATE_NICKNAME})
         return Response(
             {
                 'token': player.token,
