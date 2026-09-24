@@ -1,436 +1,263 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
-import type { LiveHostState } from '../../types';
-import { liveAPI } from '../../services/api';
-import MathText from '../UI/MathText';
+import { useEffect, useState } from 'react';
+import { Gamepad2, Play, Plus, Trash2, Users } from 'lucide-react';
+import { cbtAPI, errorMessage, fetchAll, liveAPI } from '../../services/api';
+import type { LiveSession, LiveStatus, QuestionBank } from '../../types';
 import {
-  Confetti, Kicker, KeySquare, LiveDot, ProgressLine, Rule, Stage, Standings,
-  hexToRgba, useDeadline, useInterval,
-} from './shared';
-import { useLiveMusic } from './music';
+  Alert, Badge, Button, EmptyState, Field, Modal, PageHeader, Spinner, inputClass,
+} from '../UI/Primitives';
+import HostGame from './HostGame';
 
-const MUSIC_KEY = 'live.music.muted';
+const STATUS_TONE: Record<LiveStatus, 'gray' | 'amber' | 'green' | 'brand'> = {
+  lobby: 'amber', question: 'green', reveal: 'brand', scoreboard: 'brand', ended: 'gray',
+};
+const STATUS_LABEL: Record<LiveStatus, string> = {
+  lobby: 'In lobby', question: 'Live', reveal: 'Live', scoreboard: 'Scoreboard', ended: 'Ended',
+};
 
 /**
- * The host's presenter screen — built for a shared display. A broadcast board:
- * ink stage, the PIN set as a headline, questions as a numbered ledger, and a
- * results board on reveal. All game control lives here.
+ * Staff landing for the live quiz: list your games, spin up a new one, and jump
+ * into the presenter screen to host it.
  */
-export default function HostGame({
-  sessionId,
-  onExit,
-}: {
-  sessionId: number;
-  onExit: () => void;
-}) {
-  const [st, setSt] = useState<LiveHostState | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [musicMuted, setMusicMuted] = useState(() => {
-    try {
-      return localStorage.getItem(MUSIC_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
+export default function HostConsole() {
+  const [sessions, setSessions] = useState<LiveSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [hostingId, setHostingId] = useState<number | null>(null);
 
-  // Music lives only on the host screen (the projector). Beds follow the phase.
-  const music = useLiveMusic(musicMuted);
-  useEffect(() => {
-    music.setPhase(st?.status ?? null);
-  }, [music, st?.status]);
-
-  const toggleMusic = () =>
-    setMusicMuted((m) => {
-      const next = !m;
-      try {
-        localStorage.setItem(MUSIC_KEY, next ? '1' : '0');
-      } catch {
-        /* private mode — fall back to in-memory */
-      }
-      return next;
-    });
-
-  const poll = useCallback(async () => {
-    try {
-      const { data } = await liveAPI.hostState(sessionId);
-      setSt(data);
-    } catch {
-      /* transient — next tick retries */
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    poll();
-  }, [poll]);
-  useInterval(poll, st?.status === 'ended' || busy ? null : 1000);
-
-  const accent = st?.accent || '#2563eb';
-  const ms = useDeadline(st?.deadline, st?.server_time);
-  const total = (st?.seconds_per_question || 20) * 1000;
-  const seconds = ms === null ? null : Math.ceil(ms / 1000);
-
-  const act = async (fn: () => Promise<{ data: LiveHostState }>) => {
-    music.unlock(); // this click is a user gesture — safe to start audio
-    setBusy(true);
-    try {
-      const { data } = await fn();
-      setSt(data);
-    } finally {
-      setBusy(false);
-    }
+  const load = () => {
+    setLoading(true);
+    liveAPI.sessions()
+      .then(({ data }) => setSessions(data.results))
+      .catch((e) => setError(errorMessage(e, 'Could not load games.')))
+      .finally(() => setLoading(false));
   };
 
-  if (!st) {
+  useEffect(load, []);
+
+  const remove = async (id: number) => {
+    await liveAPI.removeSession(id).catch(() => {});
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  if (hostingId !== null) {
+    // The presenter takes over the whole viewport.
     return (
-      <Stage accent={accent}>
-        <div className="flex min-h-screen items-center justify-center">
-          <Kicker>Connecting…</Kicker>
-        </div>
-      </Stage>
+      <div className="fixed inset-0 z-[60]">
+        <HostGame
+          sessionId={hostingId}
+          onExit={() => {
+            setHostingId(null);
+            load();
+          }}
+        />
+      </div>
     );
   }
 
   return (
-    <Stage accent={accent}>
-      {st.status === 'question' && (
-        <ProgressLine fraction={ms === null ? 0 : ms / total} accent={accent} />
+    <div className="space-y-4">
+      <PageHeader
+        title="Live Quiz"
+        subtitle="Host a fast, Kahoot-style game. Players join with a PIN — just for fun, no grades."
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" /> New game
+          </Button>
+        }
+      />
+
+      {error && <Alert onDismiss={() => setError('')}>{error}</Alert>}
+
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Spinner className="h-8 w-8 text-brand-600" />
+        </div>
+      ) : sessions.length === 0 ? (
+        <EmptyState message="No games yet. Create one from a question bank to get started." />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              className="flex flex-col rounded-xl border border-gray-200 bg-white p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-gray-900">{s.title}</p>
+                  <p className="truncate text-xs text-gray-500">
+                    {s.subject_name} · {s.question_count || '—'} questions
+                  </p>
+                </div>
+                <Badge tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Badge>
+              </div>
+
+              <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
+                {s.status !== 'ended' && (
+                  <span className="font-mono text-base font-bold tracking-widest text-gray-900">
+                    {s.pin}
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <Users className="h-4 w-4" />
+                  {s.player_count}
+                </span>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                {s.status !== 'ended' && (
+                  <Button size="md" className="flex-1" onClick={() => setHostingId(s.id)}>
+                    <Play className="h-4 w-4" /> Host
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => remove(s.id)}
+                  aria-label="Delete game"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      <div className="flex min-h-screen flex-col px-6 sm:px-10">
-        {/* top rail */}
-        <header className="flex items-center justify-between pt-8">
-          <div className="min-w-0">
-            <Kicker>NlightR · Live</Kicker>
-            <p className="mt-1 truncate text-lg font-bold tracking-tight">{st.title}</p>
-          </div>
-          <div className="flex items-center gap-5">
-            {st.status !== 'lobby' && st.status !== 'ended' && (
-              <span className="font-mono text-sm tracking-[0.2em] text-white/70 tabular-nums">
-                {String(st.question_index + 1).padStart(2, '0')} / {String(st.question_count).padStart(2, '0')}
-              </span>
-            )}
-            {(st.status === 'question' || st.status === 'reveal') && <LiveDot />}
-            <button
-              onClick={toggleMusic}
-              className="text-white/40 transition hover:text-white"
-              aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
-              title={musicMuted ? 'Unmute music' : 'Mute music'}
-            >
-              {musicMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </button>
-            <button
-              onClick={() => act(() => liveAPI.end(sessionId)).then(onExit)}
-              className="font-mono text-lg text-white/40 transition hover:text-white"
-              aria-label="End game"
-            >
-              ✕
-            </button>
-          </div>
-        </header>
-        <Rule className="mt-6" />
-
-        <div className="flex flex-1 flex-col py-8">
-          {st.status === 'lobby' && (
-            <Lobby st={st} accent={accent} busy={busy} onStart={() => act(() => liveAPI.start(sessionId))} />
-          )}
-          {(st.status === 'question' || st.status === 'reveal') && (
-            <Board
-              st={st}
-              accent={accent}
-              seconds={seconds}
-              busy={busy}
-              onReveal={() => act(() => liveAPI.reveal(sessionId))}
-              onNext={() => act(() => liveAPI.next(sessionId))}
-            />
-          )}
-          {st.status === 'scoreboard' && (
-            <ScoreboardStage
-              key={st.question_index}
-              st={st}
-              accent={accent}
-              busy={busy}
-              onNext={() => act(() => liveAPI.next(sessionId))}
-            />
-          )}
-          {st.status === 'ended' && <Final st={st} accent={accent} onExit={onExit} />}
-        </div>
-      </div>
-    </Stage>
+      {creating && (
+        <NewGameModal
+          onClose={() => setCreating(false)}
+          onCreated={(id) => {
+            setCreating(false);
+            setHostingId(id);
+          }}
+        />
+      )}
+    </div>
   );
 }
 
-function CommandButton({
-  onClick,
-  disabled,
-  accent,
-  variant = 'solid',
-  children,
+function NewGameModal({
+  onClose,
+  onCreated,
 }: {
-  onClick: () => void;
-  disabled?: boolean;
-  accent: string;
-  variant?: 'solid' | 'ghost';
-  children: React.ReactNode;
+  onClose: () => void;
+  onCreated: (id: number) => void;
 }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-[6px] px-8 py-3.5 text-sm font-bold uppercase tracking-[0.15em] transition disabled:opacity-40 ${
-        variant === 'ghost' ? 'border border-white/25 text-white hover:bg-white/5' : ''
-      }`}
-      style={variant === 'solid' ? { background: accent, color: '#0a0a0f' } : undefined}
-    >
-      {children}
-    </button>
-  );
-}
+  const [banks, setBanks] = useState<QuestionBank[]>([]);
+  const [bank, setBank] = useState<number | ''>('');
+  const [title, setTitle] = useState('');
+  const [seconds, setSeconds] = useState(20);
+  const [speedBonus, setSpeedBonus] = useState(true);
+  const [scoreboardEvery, setScoreboardEvery] = useState(3);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-function Lobby({
-  st,
-  accent,
-  busy,
-  onStart,
-}: {
-  st: LiveHostState;
-  accent: string;
-  busy: boolean;
-  onStart: () => void;
-}) {
+  useEffect(() => {
+    fetchAll<QuestionBank>((params) => cbtAPI.banks(params), { is_active: true })
+      .then((rows) => setBanks(rows.filter((b) => b.question_count > 0)))
+      .catch((e) => setError(errorMessage(e, 'Could not load question banks.')))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const create = async () => {
+    if (!bank) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { data } = await liveAPI.createSession({
+        bank: Number(bank),
+        title: title.trim() || undefined,
+        seconds_per_question: seconds,
+        speed_bonus: speedBonus,
+        scoreboard_every: scoreboardEvery,
+      });
+      onCreated(data.id);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not create the game.'));
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="flex flex-1 flex-col justify-center">
-      <div className="grid gap-10 lg:grid-cols-[auto_1fr] lg:items-center">
-        <div>
-          <Kicker>Game PIN</Kicker>
-          <div className="mt-3">
-            <span className="block font-mono text-7xl font-black tabular-nums tracking-[0.1em] sm:text-8xl">
-              {st.pin}
-            </span>
-            <div className="mt-4 h-1.5 w-full" style={{ background: accent }} />
-          </div>
-          <p className="mt-5 max-w-xs text-sm text-white/50">
-            Open this site and choose{' '}
-            <span className="font-semibold text-white">Join a quiz</span> — no account needed.
-          </p>
+    <Modal open title="New live game" onClose={onClose}>
+      {error && <Alert>{error}</Alert>}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Spinner className="h-6 w-6 text-brand-600" />
         </div>
-
-        <div>
-          <div className="mb-4 flex items-baseline justify-between">
-            <Kicker>In the room</Kicker>
-            <span className="font-mono text-2xl font-bold tabular-nums" style={{ color: accent }}>
-              {String(st.player_count).padStart(2, '0')}
-            </span>
-          </div>
-          {st.players.length === 0 ? (
-            <p className="text-white/40">Waiting for players to join…</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {st.players.map((p, i) => (
-                <span
-                  key={p.nickname}
-                  className="flex animate-[fadeIn_.3s_ease] items-center gap-2 rounded-[5px] border border-white/12 bg-white/[0.03] px-3 py-1.5"
-                >
-                  <span className="font-mono text-[11px] text-white/35 tabular-nums">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="font-semibold">{p.nickname}</span>
-                </span>
+      ) : banks.length === 0 ? (
+        <EmptyState message="No question banks with questions yet. Add questions in CBT first." />
+      ) : (
+        <div className="space-y-4">
+          <Field label="Question bank" required>
+            <select
+              className={inputClass}
+              value={bank}
+              onChange={(e) => setBank(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">Choose a bank…</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.subject_name} — {b.name} ({b.question_count})
+                </option>
               ))}
-            </div>
-          )}
-        </div>
-      </div>
+            </select>
+          </Field>
 
-      <div className="mt-12">
-        <CommandButton onClick={onStart} disabled={busy || st.player_count === 0} accent={accent}>
-          ▸ Start game
-        </CommandButton>
-      </div>
-    </div>
-  );
-}
+          <Field label="Game title">
+            <input
+              className={inputClass}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Defaults to the bank name"
+            />
+          </Field>
 
-function Board({
-  st,
-  accent,
-  seconds,
-  busy,
-  onReveal,
-  onNext,
-}: {
-  st: LiveHostState;
-  accent: string;
-  seconds: number | null;
-  busy: boolean;
-  onReveal: () => void;
-  onNext: () => void;
-}) {
-  const q = st.question!;
-  const revealing = st.status === 'reveal';
-  const correct = new Set(st.correct_choice_ids ?? []);
-  const dist = st.distribution ?? {};
-  const maxCount = Math.max(1, ...Object.values(dist));
-  const last = st.question_index + 1 >= st.question_count;
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex items-start justify-between gap-6">
-        <div className="min-w-0 flex-1">
-          <Kicker>Question {st.question_index + 1}</Kicker>
-          <MathText className="mt-3 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
-            {q.text}
-          </MathText>
-          {q.image && (
-            <img src={q.image} alt="" className="mt-5 max-h-52 rounded-lg border border-white/10" />
-          )}
-        </div>
-        {!revealing && seconds !== null && (
-          <div className="shrink-0 text-right">
-            <span className="block font-mono text-6xl font-black tabular-nums leading-none sm:text-7xl">
-              {seconds}
-            </span>
-            <Kicker className="mt-1 block">seconds</Kicker>
-          </div>
-        )}
-      </div>
-
-      {/* answers ledger */}
-      <div className="mt-8">
-        <Rule />
-        {q.choices.map((c, i) => {
-          const isRight = correct.has(c.id);
-          const count = dist[String(c.id)] ?? 0;
-          return (
-            <div key={c.id}>
-              <div
-                className={`flex items-center gap-4 px-1 py-4 transition ${
-                  revealing && !isRight ? 'opacity-35' : ''
-                }`}
-                style={revealing && isRight ? { background: hexToRgba(accent, 0.12) } : undefined}
-              >
-                <KeySquare index={i} filled={revealing && isRight} accent={accent} />
-                <MathText inline className="flex-1 text-xl font-semibold text-white">
-                  {c.text}
-                </MathText>
-                {revealing && (
-                  <span className="font-mono tabular-nums text-white/60">{count}</span>
-                )}
-                {revealing && isRight && (
-                  <span className="text-2xl" style={{ color: accent }}>✓</span>
-                )}
-              </div>
-              {revealing && (
-                <div className="h-[3px] w-full bg-white/[0.06]">
-                  <div
-                    className="h-full transition-[width] duration-500"
-                    style={{
-                      width: `${(count / maxCount) * 100}%`,
-                      background: isRight ? accent : 'rgba(255,255,255,.22)',
-                    }}
-                  />
-                </div>
-              )}
-              <Rule />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* action rail */}
-      <div className="mt-6 flex items-center justify-between">
-        <span className="font-mono text-sm tracking-wide text-white/45 tabular-nums">
-          {st.answered_count ?? 0} / {st.player_count} answered
-        </span>
-        {revealing ? (
-          <CommandButton onClick={onNext} disabled={busy} accent={accent}>
-            {last ? 'Final results ▸' : st.next_is_scoreboard ? 'Scoreboard ▸' : 'Next ▸'}
-          </CommandButton>
-        ) : (
-          <CommandButton onClick={onReveal} disabled={busy} accent={accent} variant="ghost">
-            Show results
-          </CommandButton>
-        )}
-      </div>
-
-    </div>
-  );
-}
-
-function ScoreboardStage({
-  st,
-  accent,
-  busy,
-  onNext,
-}: {
-  st: LiveHostState;
-  accent: string;
-  busy: boolean;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <Confetti accent={accent} />
-      <div className="mb-6">
-        <Kicker>After question {st.question_index + 1}</Kicker>
-        <h2 className="mt-1 text-4xl font-black tracking-tight sm:text-5xl">Scoreboard</h2>
-      </div>
-
-      <div className="flex flex-1 items-center">
-        <Standings rows={st.standings ?? []} accent={accent} />
-      </div>
-
-      <div className="mt-6 flex items-center justify-between">
-        <span className="font-mono text-sm text-white/45 tabular-nums">
-          Question {st.question_index + 2} of {st.question_count} up next
-        </span>
-        <CommandButton onClick={onNext} disabled={busy} accent={accent}>
-          Next question ▸
-        </CommandButton>
-      </div>
-    </div>
-  );
-}
-
-function Final({ st, accent, onExit }: { st: LiveHostState; accent: string; onExit: () => void }) {
-  const podium = st.podium ?? [];
-  return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center">
-      <Confetti accent={accent} count={220} />
-      <Kicker>Final standings</Kicker>
-      <h2 className="mb-8 mt-2 text-5xl font-black tracking-tight">Results</h2>
-
-      <div>
-        {podium.map((row) => {
-          const champ = row.rank === 1;
-          return (
-            <div
-              key={row.rank}
-              className={`flex items-center gap-5 px-5 py-4 ${champ ? 'rounded-[6px]' : ''}`}
-              style={champ ? { background: accent, color: '#0a0a0f' } : undefined}
+          <Field label="Seconds per question">
+            <select
+              className={inputClass}
+              value={seconds}
+              onChange={(e) => setSeconds(Number(e.target.value))}
             >
-              <span
-                className={`font-mono text-4xl font-black tabular-nums ${champ ? '' : 'text-white/30'}`}
-              >
-                {row.rank}
-              </span>
-              <span className="flex-1 truncate text-2xl font-bold">{row.nickname}</span>
-              <span className="font-mono text-xl tabular-nums">{row.score}</span>
-              {champ && (
-                <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em]">
-                  Winner
-                </span>
-              )}
-            </div>
-          );
-        })}
-        {podium.length === 0 && <p className="text-white/40">No players finished.</p>}
-      </div>
+              {[10, 15, 20, 30, 45, 60].map((n) => (
+                <option key={n} value={n}>{n} seconds</option>
+              ))}
+            </select>
+          </Field>
 
-      <div className="mt-10">
-        <CommandButton onClick={onExit} accent={accent} variant="ghost">
-          Done
-        </CommandButton>
-      </div>
-    </div>
+          <Field label="Scoreboard interlude">
+            <select
+              className={inputClass}
+              value={scoreboardEvery}
+              onChange={(e) => setScoreboardEvery(Number(e.target.value))}
+            >
+              <option value={1}>After every question</option>
+              <option value={2}>After every 2 questions</option>
+              <option value={3}>After every 3 questions</option>
+              <option value={4}>After every 4 questions</option>
+              <option value={5}>After every 5 questions</option>
+            </select>
+          </Field>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={speedBonus}
+              onChange={(e) => setSpeedBonus(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Award more points for faster answers
+          </label>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button onClick={create} loading={busy} disabled={!bank}>
+              <Gamepad2 className="h-4 w-4" /> Create & host
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
