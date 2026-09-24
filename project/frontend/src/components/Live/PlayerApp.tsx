@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import type { LivePlayerState } from '../../types';
 import { errorMessage, liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
@@ -6,6 +7,7 @@ import {
   Confetti, Kicker, KeySquare, ProgressLine, Rule, Stage, Standings,
   hexToRgba, useDeadline, useInterval,
 } from './shared';
+import { useLiveMusic } from './music';
 
 interface Joined {
   pin: string;
@@ -14,6 +16,7 @@ interface Joined {
 }
 
 const STORAGE_KEY = 'live.player';
+const MUSIC_KEY = 'live.player.music.muted';
 const MISS = '#e0533d';
 
 /**
@@ -146,6 +149,31 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
   const [submitting, setSubmitting] = useState(false);
   const [gone, setGone] = useState(false);
   const lastIndex = useRef<number>(-1);
+  const [musicMuted, setMusicMuted] = useState(() => {
+    try {
+      return localStorage.getItem(MUSIC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const music = useLiveMusic(musicMuted);
+
+  useEffect(() => {
+    music.setPhase(st?.status ?? null, st?.result, 'player');
+  }, [music, st?.status, st?.result]);
+
+  const toggleMusic = () => {
+    music.unlock();
+    setMusicMuted((muted) => {
+      const next = !muted;
+      try {
+        localStorage.setItem(MUSIC_KEY, next ? '1' : '0');
+      } catch {
+        /* private mode — fall back to in-memory */
+      }
+      return next;
+    });
+  };
 
   const poll = useCallback(async () => {
     try {
@@ -228,6 +256,14 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
               </span>
             )}
             <span className="font-mono text-lg tabular-nums">{you.score}</span>
+            <button
+              onClick={toggleMusic}
+              className="text-white/40 transition hover:text-white"
+              aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
+              title={musicMuted ? 'Unmute music' : 'Mute music'}
+            >
+              {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
           </span>
         </div>
         <Rule className="mt-4" />

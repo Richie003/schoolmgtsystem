@@ -8,10 +8,10 @@ import {
 import HostGame from './HostGame';
 
 const STATUS_TONE: Record<LiveStatus, 'gray' | 'amber' | 'green' | 'brand'> = {
-  lobby: 'amber', question: 'green', reveal: 'brand', ended: 'gray',
+  lobby: 'amber', question: 'green', reveal: 'brand', scoreboard: 'brand', ended: 'gray',
 };
 const STATUS_LABEL: Record<LiveStatus, string> = {
-  lobby: 'In lobby', question: 'Live', reveal: 'Live', ended: 'Ended',
+  lobby: 'In lobby', question: 'Live', reveal: 'Live', scoreboard: 'Scoreboard', ended: 'Ended',
 };
 
 /**

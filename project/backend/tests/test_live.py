@@ -4,7 +4,9 @@ state machine.
 """
 
 from datetime import timedelta
+from unittest.mock import patch
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -12,11 +14,13 @@ from rest_framework.test import APIClient
 from accounts.models import Role, User
 from cbt.models import Choice, Question, QuestionBank, Subject
 from core.models import School
+from live.contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN
 from live.models import GamePlayer, GameSession
 
 
-class LiveFixture(TestCase):
+class LiveFixtureMixin:
     def setUp(self):
+        super().setUp()
         self.school = School.objects.create(name='Green', code='GRN')
         self.other = School.objects.create(name='Blue', code='BLU')
 
@@ -75,6 +79,10 @@ class LiveFixture(TestCase):
             {'token': token, 'choice_ids': choice_ids}, format='json')
 
 
+class LiveFixture(LiveFixtureMixin, TestCase):
+    pass
+
+
 class HostingTests(LiveFixture):
     def test_create_allocates_pin_and_lobby(self):
         data = self.host_session(title='Friday Fun')
@@ -109,10 +117,16 @@ class HostingTests(LiveFixture):
 
 class JoinTests(LiveFixture):
     def test_join_returns_token(self):
-        pin = self.host_session()['pin']
+        hosted = self.host_session()
+        pin = hosted['pin']
         resp = self.join(pin, 'Ada')
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(resp.data['token'])
+        self.assertEqual(resp.data['title'], hosted['title'])
+        state = self.state(pin, resp.data['token'])
+        self.assertEqual(state.status_code, 200)
+        self.assertEqual(state.data['status'], 'lobby')
+        self.assertEqual(state.data['title'], hosted['title'])
         self.assertEqual(GamePlayer.objects.count(), 1)
 
     def test_duplicate_nickname_rejected(self):
@@ -120,6 +134,8 @@ class JoinTests(LiveFixture):
         self.join(pin, 'Ada')
         resp = self.join(pin, 'ada')  # case-insensitive clash
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['nickname'], DUPLICATE_NICKNAME)
+        self.assertEqual(GamePlayer.objects.count(), 1)
 
     def test_blank_nickname_rejected(self):
         pin = self.host_session()['pin']
@@ -129,6 +145,68 @@ class JoinTests(LiveFixture):
     def test_bad_pin_is_404(self):
         resp = self.join('000000', 'Ada')
         self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data['detail'], NO_LIVE_GAME_WITH_PIN)
+
+    def test_ended_game_pin_is_refused_with_the_same_message(self):
+        hosted = self.host_session()
+        session_id = hosted['id']
+        self.as_(self.admin).post(f'/api/live/sessions/{session_id}/end/')
+
+        resp = self.join(hosted['pin'], 'Ada')
+
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.data['detail'], NO_LIVE_GAME_WITH_PIN)
+
+    def test_join_race_returns_the_duplicate_nickname_message(self):
+        pin = self.host_session()['pin']
+        original_create = GamePlayer.objects.create
+
+        def create_after_a_concurrent_join(**kwargs):
+            original_create(
+                session=kwargs['session'],
+                nickname=kwargs['nickname'],
+                token='a' * 32,
+            )
+            return original_create(**kwargs)
+
+        with patch(
+            'live.views.GamePlayer.objects.create', side_effect=create_after_a_concurrent_join
+        ):
+            resp = self.join(pin, 'Ada')
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['nickname'], DUPLICATE_NICKNAME)
+
+
+class LivePinConstraintTests(LiveFixture):
+    def test_only_one_live_game_can_hold_a_pin(self):
+        first = GameSession.objects.create(
+            school=self.school, host=self.admin, bank=self.bank, title='First', pin='123456'
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                GameSession.objects.create(
+                    school=self.school, host=self.admin, bank=self.bank, title='Second', pin='123456'
+                )
+
+        self.assertEqual(GameSession.objects.filter(pin='123456').count(), 1)
+        first.status = GameSession.Status.ENDED
+        first.save(update_fields=['status'])
+        replacement = GameSession.objects.create(
+            school=self.school, host=self.admin, bank=self.bank, title='Replacement', pin='123456'
+        )
+        self.assertEqual(replacement.pin, '123456')
+
+    def test_host_create_retries_a_pin_claimed_during_allocation(self):
+        GameSession.objects.create(
+            school=self.school, host=self.admin, bank=self.bank, title='Existing', pin='123456'
+        )
+
+        with patch('live.views.services.unique_pin', side_effect=['123456', '654321']):
+            hosted = self.host_session()
+
+        self.assertEqual(hosted['pin'], '654321')
 
 
 class GameplayTests(LiveFixture):
@@ -187,6 +265,52 @@ class GameplayTests(LiveFixture):
         after = self.state(self.pin, self.token).data
         self.assertEqual(after['status'], 'reveal')
         self.assertGreater(after['you']['score'], 0)     # applied at reveal
+
+    def test_replaying_reveal_cannot_apply_scores_twice(self):
+        self.start()
+        self.answer_right()
+
+        first = self.reveal()
+        score_after_first_reveal = GamePlayer.objects.get(nickname='Ada').score
+        second = self.reveal()
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, score_after_first_reveal)
+
+    def test_ending_during_a_question_keeps_answers_already_accepted(self):
+        self.start()
+        self.answer_right()
+
+        response = self.as_(self.admin).post(f'/api/live/sessions/{self.sid}/end/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'ended')
+        self.assertGreater(GamePlayer.objects.get(nickname='Ada').score, 0)
+
+    def test_failed_reveal_rolls_back_all_scores_and_the_transition(self):
+        self.start()
+        self.answer_right()
+        bob = self.join(self.pin, 'Bob').data['token']
+        self.answer_right(bob)
+        original_save = GamePlayer.save
+        save_count = 0
+
+        def fail_on_second_save(player, *args, **kwargs):
+            nonlocal save_count
+            save_count += 1
+            if save_count == 2:
+                raise RuntimeError('database write interrupted')
+            return original_save(player, *args, **kwargs)
+
+        with patch('live.services.GamePlayer.save', new=fail_on_second_save):
+            with self.assertRaises(RuntimeError):
+                self.reveal()
+
+        session = GameSession.objects.get(pk=self.sid)
+        self.assertEqual(session.status, GameSession.Status.QUESTION)
+        self.assertEqual(GamePlayer.objects.get(nickname='Ada').score, 0)
+        self.assertEqual(GamePlayer.objects.get(nickname='Bob').score, 0)
 
     def test_correct_answer_scores_wrong_scores_zero(self):
         self.start()

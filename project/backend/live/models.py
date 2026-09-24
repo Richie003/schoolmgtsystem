@@ -80,6 +80,13 @@ class GameSession(TenantModel):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['pin', 'status'])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['pin'],
+                condition=~models.Q(status='ended'),
+                name='unique_live_game_pin',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.title or self.bank} ({self.pin})'
@@ -128,7 +135,9 @@ class GamePlayer(models.Model):
         ordering = ['-score', 'joined_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['session', 'nickname'], name='unique_nickname_per_game'
+                models.functions.Lower('nickname'),
+                'session',
+                name='unique_nickname_per_game',
             ),
         ]
 
