@@ -28,6 +28,7 @@ from . import services
 from .contracts import DUPLICATE_NICKNAME, NO_LIVE_GAME_WITH_PIN, PIN_ALLOCATION_FAILED
 from .models import GamePlayer, GameSession, generate_token
 from .serializers import GameSessionSerializer
+from .realtime import publish_session
 
 
 def _is_constraint_error(error, constraint_name, sqlite_fragment):
@@ -88,24 +89,28 @@ class GameSessionViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     def start(self, request, pk=None):
         session = self.get_object()
         services.start_game(session)
+        publish_session(session.pk)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def reveal(self, request, pk=None):
         session = self.get_object()
         session = services.reveal(session)
+        publish_session(session.pk)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def next(self, request, pk=None):
         session = self.get_object()
         session = services.next_question(session)
+        publish_session(session.pk)
         return Response(services.host_state(session, request))
 
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
         session = self.get_object()
         session = services.end_game(session)
+        publish_session(session.pk)
         return Response(services.host_state(session, request))
 
 
@@ -161,6 +166,7 @@ class PlayerJoinView(APIView):
             # A simultaneous join can pass the read above; the database is the
             # final authority and must still yield the normal student message.
             raise ValidationError({'nickname': DUPLICATE_NICKNAME})
+        publish_session(session.pk, audience='hosts')
         return Response(
             {
                 'token': player.token,
@@ -193,4 +199,6 @@ class PlayerAnswerView(APIView):
         choice_ids = request.data.get('choice_ids') or []
         if not isinstance(choice_ids, list):
             raise ValidationError({'choice_ids': 'Expected a list of choice ids.'})
-        return Response(services.record_answer(player.session, player, choice_ids))
+        result = services.record_answer(player.session, player, choice_ids)
+        publish_session(player.session_id, audience='hosts')
+        return Response(result)

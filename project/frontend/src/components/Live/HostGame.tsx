@@ -5,7 +5,7 @@ import { liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
 import {
   Confetti, Kicker, KeySquare, LiveDot, ProgressLine, Rule, Stage, Standings,
-  hexToRgba, useDeadline, useInterval,
+  hexToRgba, useDeadline, useInterval, useLiveSocket,
 } from './shared';
 import { useLiveMusic } from './music';
 
@@ -62,7 +62,8 @@ export default function HostGame({
   useEffect(() => {
     poll();
   }, [poll]);
-  useInterval(poll, st?.status === 'ended' || busy ? null : 1000);
+  const socketConnected = useLiveSocket({ audience: 'host', sessionId, onUpdate: poll });
+  useInterval(poll, st?.status === 'ended' || busy ? null : socketConnected ? 5000 : 1000);
 
   const accent = st?.accent || '#2563eb';
   const ms = useDeadline(st?.deadline, st?.server_time);
