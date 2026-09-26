@@ -1,3 +1,4 @@
+daphne
 Django==5.2.6
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
