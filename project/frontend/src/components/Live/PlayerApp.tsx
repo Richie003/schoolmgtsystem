@@ -5,7 +5,7 @@ import { errorMessage, liveAPI } from '../../services/api';
 import MathText from '../UI/MathText';
 import {
   Confetti, Kicker, KeySquare, ProgressLine, Rule, Stage, Standings,
-  hexToRgba, useDeadline, useInterval,
+  hexToRgba, useDeadline, useInterval, useLiveSocket,
 } from './shared';
 import { useLiveMusic } from './music';
 
@@ -187,7 +187,8 @@ function PlayerGame({ joined, onLeave }: { joined: Joined; onLeave: () => void }
   useEffect(() => {
     poll();
   }, [poll]);
-  useInterval(poll, gone ? null : 1000);
+  const socketConnected = useLiveSocket({ audience: 'player', pin, playerToken: token, onUpdate: poll });
+  useInterval(poll, gone ? null : socketConnected ? 5000 : 1000);
 
   useEffect(() => {
     if (st && st.question_index !== lastIndex.current) {

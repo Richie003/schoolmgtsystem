@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LiveStanding } from '../../types';
+import { liveWebSocketUrl, liveWebSocketsEnabled, tokenStore } from '../../services/api';
 
 /*
  * NlightR Live — a "broadcast" visual language.
@@ -344,4 +345,83 @@ export function ProgressLine({ fraction, accent }: { fraction: number; accent: s
       />
     </div>
   );
+}
+
+/**
+ * Connect to a Live invalidation channel. Socket messages contain no game
+ * payload; the caller refreshes its own authorized HTTP state after each event.
+ */
+export function useLiveSocket({
+  audience,
+  onUpdate,
+  pin,
+  playerToken,
+  sessionId,
+}: {
+  audience: 'host' | 'player';
+  onUpdate: () => void;
+  pin?: string;
+  playerToken?: string;
+  sessionId?: number;
+}): boolean {
+  const [connected, setConnected] = useState(false);
+  const updateRef = useRef(onUpdate);
+  updateRef.current = onUpdate;
+
+  const credential = audience === 'host' ? tokenStore.access : playerToken;
+  useEffect(() => {
+    if (!liveWebSocketsEnabled || !credential) {
+      setConnected(false);
+      return;
+    }
+
+    let stopped = false;
+    let retryTimer: number | undefined;
+    let retryDelay = 1000;
+    let socket: WebSocket | null = null;
+    const path =
+      audience === 'host'
+        ? '/ws/live/host/' + sessionId + '/'
+        : '/ws/live/player/' + pin + '/';
+
+    const connect = () => {
+      if (stopped) return;
+      socket = new WebSocket(liveWebSocketUrl(path));
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({ type: 'authenticate', token: credential }));
+      };
+      socket.onmessage = (event) => {
+        let message: { type?: string };
+        try {
+          message = JSON.parse(event.data) as { type?: string };
+        } catch {
+          return;
+        }
+        if (message.type === 'ready') {
+          retryDelay = 1000;
+          setConnected(true);
+          updateRef.current();
+        } else if (message.type === 'state_changed') {
+          updateRef.current();
+        }
+      };
+      socket.onclose = () => {
+        if (!stopped) setConnected(false);
+        if (!stopped) {
+          retryTimer = window.setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 10000);
+        }
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      socket?.close();
+    };
+  }, [audience, credential, pin, sessionId]);
+
+  return connected;
 }

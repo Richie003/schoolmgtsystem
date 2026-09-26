@@ -1,3 +1,4 @@
+daphne
 Django==5.2.6
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
@@ -15,3 +16,6 @@ gunicorn==23.0.0
 whitenoise==6.9.0
 Pillow==11.3.0
 anthropic==0.120.2
+channels==4.3.2
+daphne==4.2.1
+channels-redis==4.3.0

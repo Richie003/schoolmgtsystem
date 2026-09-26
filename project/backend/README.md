@@ -90,3 +90,19 @@ Checklist for production:
 ```bash
 python manage.py test --settings=tests.settings_test
 ```
+
+### Optional Live quiz WebSockets
+
+WebSockets are disabled by default. The existing HTTP polling continues to work
+until both the backend and frontend flags are enabled. For a production rollout:
+
+1. Deploy the Channels/Daphne dependencies and use an ASGI process for the API
+   (for example, daphne -b 0.0.0.0 -p 8000 school_management.asgi:application).
+   Do not turn on the backend flag while the service is still served only by WSGI.
+2. Set LIVE_WEBSOCKETS_ENABLED=True, LIVE_WS_ALLOWED_ORIGINS to the exact SPA
+   origins, and ensure REDIS_URL points to the shared production Redis service.
+3. Build the frontend with VITE_LIVE_WEBSOCKETS_ENABLED=true. If the API is on a
+   different origin, VITE_API_BASE_URL already determines the socket host; set
+   VITE_WS_BASE_URL only when WebSockets use a different origin.
+4. Enable in staging first. If sockets or Redis fail, screens reconnect and
+   continue polling the HTTP state endpoints.

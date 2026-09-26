@@ -23,6 +23,8 @@ ALLOWED_HOSTS = config(
 )
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -328,4 +330,19 @@ LOGGING = {
         'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
     },
     'root': {'handlers': ['console'], 'level': config('LOG_LEVEL', default='INFO')},
+}
+
+# Live-quiz WebSockets are opt-in until the ASGI server and Redis channel layer
+# are configured in the deployment. HTTP polling remains available as fallback.
+LIVE_WEBSOCKETS_ENABLED = config('LIVE_WEBSOCKETS_ENABLED', default=False, cast=bool)
+LIVE_WS_ALLOWED_ORIGINS = config(
+    'LIVE_WS_ALLOWED_ORIGINS',
+    default='http://localhost:5173,http://127.0.0.1:5173',
+    cast=Csv(),
+)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [REDIS_URL]},
+    },
 }

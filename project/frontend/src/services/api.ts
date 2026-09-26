@@ -621,3 +621,19 @@ export const onboardingAPI = {
 };
 
 export default api;
+
+// WebSocket endpoint for Live state invalidations. The HTTP API can be hosted
+// separately from the SPA, so derive the socket origin from its configured URL
+// unless an explicit VITE_WS_BASE_URL is supplied.
+export const liveWebSocketsEnabled =
+  import.meta.env.VITE_LIVE_WEBSOCKETS_ENABLED === 'true';
+
+export function liveWebSocketUrl(path: string): string {
+  const configured = import.meta.env.VITE_WS_BASE_URL as string | undefined;
+  const base = new URL(configured || API_BASE_URL, window.location.href);
+  base.protocol = base.protocol === 'https:' || base.protocol === 'wss:' ? 'wss:' : 'ws:';
+  base.pathname = path;
+  base.search = '';
+  base.hash = '';
+  return base.toString();
+}
