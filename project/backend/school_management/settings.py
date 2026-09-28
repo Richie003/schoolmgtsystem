@@ -98,7 +98,7 @@ DATABASES = {
             default=config("DATABASE_URL"),
         ),
         # Do not hold scarce Supabase pooler sessions open during local dev.
-        conn_max_age=0
+        conn_max_age=0,
         conn_health_checks=True,
     )
 }
